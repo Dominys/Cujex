@@ -2,11 +2,13 @@ package io.github.dominys.cujex.context;
 
 import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 import io.github.dominys.cujex.jexl.CucJexlFunctions;
+import io.github.dominys.cujex.jexl.CujexJexlFunctions;
 
 import org.apache.commons.jexl3.JexlBuilder;
 import org.apache.commons.jexl3.JexlEngine;
-import org.apache.commons.jexl3.MapContext;
+import org.apache.commons.jexl3.JexlFeatures;
 import org.apache.commons.jexl3.introspection.JexlPermissions;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
@@ -47,6 +49,11 @@ import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
  *     <li>navigate them: {@code ${created.customer().country()}}</li>
  *     <li>build literals: {@code ${[`vip`,`priority`]}}, {@code ${[1,2,3]}}</li>
  *     <li>call custom functions: {@code ${now('-PT1H')}} (see {@link CucJexlFunctions})</li>
+ *     <li>call consumer-contributed functions, in the default namespace or under a
+ *         custom prefix such as {@code ${math:max(3,7)}} (see {@link CujexJexlFunctions})</li>
+ *     <li>call <b>context-aware</b> functions that receive the live
+ *         {@link CujexJexlContext} (and thus this {@code ScenarioContext}) - see
+ *         {@link CujexJexlContext}</li>
  * </ul>
  *
  * <p>Glue-scoped so it shares the same per-scenario lifecycle as the store it reads.
@@ -62,24 +69,45 @@ public class ScenarioContext {
     private final JexlEngine jexl;
     private final ScenarioContextStore scenarioContextStore;
 
-    public ScenarioContext(ScenarioContextStore scenarioContextStore) {
+    public ScenarioContext(ScenarioContextStore scenarioContextStore,
+                           ObjectProvider<CujexJexlFunctions> functionContributors) {
         this.scenarioContextStore = scenarioContextStore;
 
         // Register CucJexlFunctions under the default (null) namespace so its
         // public static methods are callable directly, e.g. ${now('-PT1H')}.
-        var functions = new HashMap<String, Object>();
-        functions.put(null, CucJexlFunctions.class);
+        var namespaces = new HashMap<String, Object>();
+        namespaces.put(null, CucJexlFunctions.class);
+
+        // Merge in any consumer-contributed functions. A blank namespace targets the
+        // default namespace (last registration wins - typically a CucJexlFunctions
+        // subclass that keeps the built-ins); a prefix must be unique.
+        functionContributors.orderedStream().forEach(contributor -> {
+            var prefix = normalizePrefix(contributor.namespace());
+            if (prefix != null && namespaces.containsKey(prefix)) {
+                throw new IllegalStateException("Duplicate JEXL namespace '" + prefix + "'");
+            }
+            namespaces.put(prefix, contributor.functions());
+        });
 
         this.jexl = new JexlBuilder()
                 .cache(512)
                 .strict(true)
                 .silent(false)
-                .namespaces(functions)
-                // JEXL 3.3 sandboxes method/class access by default, which would
-                // block calls like now(...) and entity accessors. Test data is fully
-                // trusted here, so we lift the restriction.
+                .namespaces(namespaces)
+                // A namespace registered as a Class is, by default, treated as a holder
+                // of static methods. Opting into namespace instantiation lets JEXL build
+                // a fresh functor per evaluation and inject the live JexlContext through a
+                // matching constructor, which is what makes context-aware functions work.
+                .features(new JexlFeatures().namespaceInstantiation(true))
+                // JEXL sandboxes method/class access by default, which would block calls
+                // like now(...) and entity accessors. Test data is fully trusted here, so
+                // we lift the restriction.
                 .permissions(JexlPermissions.UNRESTRICTED)
                 .create();
+    }
+
+    private static String normalizePrefix(String namespace) {
+        return (namespace == null || namespace.isBlank()) ? null : namespace;
     }
 
     /**
@@ -99,7 +127,9 @@ public class ScenarioContext {
 
         // Strip the leading "${" and trailing "}" before compiling.
         var expression = jexl.createExpression(path.substring(2, path.length() - 1));
-        var context = new MapContext(scenarioContextStore.getAll());
+        // A CujexJexlContext carries both the stored variables and a back-reference
+        // to this ScenarioContext, so context-aware functions can reach it.
+        var context = new CujexJexlContext(scenarioContextStore.getAll(), this);
         return (T) expression.evaluate(context);
     }
 

@@ -18,10 +18,16 @@ import java.time.Instant;
  *
  * <p>To teach "how to add a function": just add another {@code public static}
  * method - no other wiring is required.
+ *
+ * <p>This class is intentionally <b>subclassable</b>: to add functions to the
+ * default namespace from a consuming project, extend it and implement
+ * {@link CujexJexlFunctions} (returning a blank namespace). The subclass keeps all
+ * built-ins here (they are inherited) while adding its own - see
+ * {@link CujexJexlFunctions} for a worked example.
  */
-public final class CucJexlFunctions {
+public class CucJexlFunctions {
 
-    private CucJexlFunctions() {
+    protected CucJexlFunctions() {
     }
 
     /** {@code ${now()}} - the current instant. */

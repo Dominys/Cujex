@@ -84,15 +84,23 @@ public class ParameterTypes {
     // ----------------------------------------------------------------------
 
     /**
-     * Vertical two-column table of {@code name | value} pairs, with each value
-     * JEXL-resolved. Backs "I define scenario variables:".
+     * Vertical two-column table of {@code name | expression} pairs. Backs
+     * "I define scenario variables:".
+     *
+     * <p>Note this type only structures the rows; it deliberately does <em>not</em>
+     * resolve the expressions. Resolution happens row-by-row in the step itself
+     * (see {@code InfraSteps#defineScenarioVariables}) so that each resolved value
+     * is stored before the next row is resolved. That write-through ordering lets a
+     * later cell reference an earlier cell in the <em>same</em> table - directly via
+     * {@code ${earlier}} or through a context-aware function - because the value is
+     * already in the scenario store by the time it is needed.
      */
     @DataTableType
     public StepVariables stepVariables(DataTable dataTable) {
         return new StepVariables(IntStream.range(0, dataTable.height())
                 .mapToObj(row -> new StepVariables.Variable(
                         dataTable.cell(row, 0),
-                        scenarioContext.resolveField(dataTable.cell(row, 1))))
+                        dataTable.cell(row, 1)))
                 .toList());
     }
 
