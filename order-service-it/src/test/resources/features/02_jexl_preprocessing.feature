@@ -18,10 +18,10 @@ Feature: JEXL preprocessing of feature-file values
     # Those variables are now referenceable in later cells by name.
     #  - ${createdAt}   -> injects the Instant built above
     #  - ${expectedTags}-> injects the list built above
-    #  - quantity/price are plain strings, mapped to int/double by Jackson
+    #  - price is a plain string, mapped to double by Jackson
     Given I prepare orders:
-      | cucId  | item   | quantity | price | tags          | createdAt    |
-      | order1 | gadget | 2        | 19.50 | ${expectedTags} | ${createdAt} |
+      | cucId  | price | tags            | createdAt    |
+      | order1 | 19.50 | ${expectedTags} | ${createdAt} |
 
     When I create order ${order1} and store result in created
 
@@ -38,8 +38,8 @@ Feature: JEXL preprocessing of feature-file values
     # ${customer1} resolves the stored Customer and injects it into the order's
     # `customer` field (Jackson maps the nested object).
     Given I prepare orders:
-      | cucId  | item | quantity | price | customer      |
-      | order1 | book | 1        | 5.00  | ${customer1}  |
+      | cucId  | price | customer     |
+      | order1 | 5.00  | ${customer1} |
 
     When I create order ${order1} and store result in created
 

@@ -19,11 +19,11 @@ Feature: End-to-end order creation showcase
       | cucId     | name | country |
       | customer1 | Bob  | US      |
 
-    # The order wires together: a plain value (item), typed values (quantity/price),
-    # a referenced entity (${customer1}), a variable (${orderedAt}) and a list (${expectedTags}).
+    # The order wires together: a typed value (price), a referenced entity
+    # (${customer1}), a variable (${orderedAt}) and a list (${expectedTags}).
     Given I prepare orders:
-      | cucId  | item    | quantity | price | status | customer      | createdAt     | tags            |
-      | order1 | console | 2        | 299.0 | PAID   | ${customer1}  | ${orderedAt}  | ${expectedTags} |
+      | cucId  | price | status | customer     | createdAt    | tags            |
+      | order1 | 299.0 | PAID   | ${customer1} | ${orderedAt} | ${expectedTags} |
 
     When I create order ${order1} and store result in created
 

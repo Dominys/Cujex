@@ -11,8 +11,8 @@ Feature: Storing step results in the scenario context
     # 1. Build an input entity from a table. The `cucId` column names the row;
     #    the entity is stored under that name, so it becomes referenceable as ${order1}.
     Given I prepare orders:
-      | cucId  | item   | quantity | price |
-      | order1 | widget | 3        | 9.99  |
+      | cucId  | price |
+      | order1 | 9.99  |
 
     # 2. Call the service with the stored input (${order1} is resolved to the Order
     #    object) and store the *response* under a new key: `created`.

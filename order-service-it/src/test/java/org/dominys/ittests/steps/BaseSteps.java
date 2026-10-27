@@ -5,6 +5,9 @@ import org.dominys.ittests.context.ScenarioContextStore;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
+import static org.dominys.ittests.cucumber.CucConstants.EMPTY_PLACEHOLDER;
+import static org.dominys.ittests.cucumber.CucConstants.NULL_PLACEHOLDER;
+
 /**
  * Base class for step definitions, giving every step easy access to the two
  * pieces of per-scenario state:
@@ -28,5 +31,21 @@ public abstract class BaseSteps {
 
     protected ScenarioContextStore scenarioStore() {
         return scenarioStore;
+    }
+
+    /**
+     * Turns a single table cell into a real value the way the whole suite does:
+     * the {@code (NULL)} and {@code ""} placeholders become an explicit {@code null}
+     * and empty string, and anything else is JEXL-resolved (so {@code ${...}}
+     * references, literals and functions all work). Shared by the template
+     * creation and validation steps so a cell means the same thing whether it is
+     * being written into a model or asserted against one.
+     */
+    protected Object resolveCell(String cell) {
+        return switch (cell) {
+            case NULL_PLACEHOLDER -> null;
+            case EMPTY_PLACEHOLDER -> "";
+            default -> scenarioContext().resolveField(cell);
+        };
     }
 }

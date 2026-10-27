@@ -22,6 +22,9 @@ import java.util.List;
  *         the table cell via {@code ${customer1}}.</li>
  *     <li>{@code tags} - a list, built from a JEXL literal array
  *         {@code ${[`vip`,`priority`]}}.</li>
+ *     <li>{@code items} - a list of structured {@link OrderItem} line items, which
+ *         can be built from a JSON stub's nested array or indexed in JEXL as
+ *         {@code ${created.items().get(0).sku()}}.</li>
  *     <li>{@code createdAt} - an {@link Instant}, often built from the custom
  *         JEXL function {@code ${now('-PT1H')}}.</li>
  * </ul>
@@ -29,11 +32,10 @@ import java.util.List;
 @Jacksonized
 @Builder(toBuilder = true)
 public record Order(String id,
-                    String item,
-                    int quantity,
                     double price,
                     OrderStatus status,
                     List<String> tags,
+                    List<OrderItem> items,
                     Instant createdAt,
                     Customer customer) {
 }

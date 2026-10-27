@@ -1,0 +1,26 @@
+{
+  "@descriptor": {
+    "type": "org.dominys.ittests.api.model.Order"
+  },
+  "price": 9.99,
+  "status": "NEW",
+  "tags": [
+    "standard"
+  ],
+  "items": [
+    {
+      "sku": "widget",
+      "quantity": 1,
+      "price": 9.99
+    },
+    {
+      "sku": "gadget",
+      "quantity": 4,
+      "price": 4.50
+    }
+  ],
+  "customer": {
+    "name": "Default Customer",
+    "country": "US"
+  }
+}

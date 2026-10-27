@@ -9,20 +9,20 @@ Feature: Editing selected fields of a stored entity
   Scenario: Clone an order while overriding only some fields
 
     Given I prepare orders:
-      | cucId  | item   | quantity | price |
-      | order1 | widget | 1        | 9.99  |
+      | cucId  | price | tags                  |
+      | order1 | 9.99  | ${[`vip`,`priority`]} |
 
-    # Take ${order1}, override only `quantity` and `price`, store as `order2`.
+    # Take ${order1}, override only `price`, store as `order2`.
     # (An edit table is read with a header row: first row = field names, second = values.)
     When I edit order ${order1} fields and store result in order2
-      | quantity | price |
-      | 5        | 49.95 |
+      | price |
+      | 49.95 |
 
     # Untouched field is carried over from the original...
-    Then I expect that ${order2.item()} equals ${order1.item()}
+    Then I expect that ${order2.tags()} equals ${order1.tags()}
 
-    # ...while the overridden fields hold the new values.
-    And I expect that ${order2.quantity()} equals ${5}
+    # ...while the overridden field holds the new value.
+    And I expect that ${order2.price()} equals ${49.95}
 
     # The edited clone can then be sent to the service like any other input.
     When I create order ${order2} and store result in created

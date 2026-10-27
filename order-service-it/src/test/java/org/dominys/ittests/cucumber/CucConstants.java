@@ -19,6 +19,9 @@ public final class CucConstants {
     /** Placeholder a feature file can use to represent an explicit null. */
     public static final String NULL_PLACEHOLDER = "(NULL)";
 
+    /** Placeholder a feature file can use to represent an explicit empty string. */
+    public static final String EMPTY_PLACEHOLDER = "\"\"";
+
     private CucConstants() {
     }
 }
