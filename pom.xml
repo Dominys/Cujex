@@ -16,10 +16,13 @@
     </description>
 
     <modules>
-        <module>order-service-api-model</module>
-        <module>order-service-api-client</module>
-        <module>order-service</module>
-        <module>order-service-it</module>
+        <!-- The reusable Cucumber + JEXL framework (Cujex). Published library,
+             independent of the order-service example below. -->
+        <module>cujex-core</module>
+
+        <!-- Runnable examples that consume cujex-core: a deployable order-service
+             plus the e2e tests that exercise it. Grouped under their own aggregator. -->
+        <module>examples</module>
     </modules>
 
     <properties>
@@ -46,6 +49,11 @@
     <dependencyManagement>
         <dependencies>
             <!-- Our own modules -->
+            <dependency>
+                <groupId>io.github.dominys</groupId>
+                <artifactId>cujex-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.dominys</groupId>
                 <artifactId>order-service-api-model</artifactId>

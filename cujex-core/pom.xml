@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.dominys</groupId>
+        <artifactId>it-tests-example</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <!-- Published as io.github.dominys per the Maven Central convention for
+         projects hosted at github.com/Dominys (no custom domain required). -->
+    <groupId>io.github.dominys</groupId>
+    <artifactId>cujex-core</artifactId>
+
+    <name>cujex-core</name>
+    <description>
+        Cujex - the reusable Cucumber + JEXL test framework. Provides scenario
+        context storage, per-cell JEXL preprocessing, typed data-table mapping,
+        a JSON template engine, and table-driven creation/validation steps. It is
+        domain-agnostic: an example (or real) suite adds its own glue by depending
+        on this library, autowiring ScenarioContext, and reusing ParameterTypes.
+    </description>
+
+    <!-- These are compile-scope: cujex-core is a library consumed by other
+         modules' test code, so its own API (Cucumber, Spring, Jackson, JEXL,
+         AssertJ) must be on the consumer's classpath transitively. -->
+    <dependencies>
+        <!-- Cucumber glue annotations + Spring integration (registers the
+             "cucumber-glue" scope the context beans depend on). -->
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-spring</artifactId>
+        </dependency>
+
+        <!-- JEXL: the ${...} preprocessing engine. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-jexl3</artifactId>
+        </dependency>
+
+        <!-- Jackson: maps resolved rows into typed records. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- Spring context: the glue-scoped beans use @Component/@Scope/@Autowired. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- AssertJ: the validation steps assert with it. -->
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

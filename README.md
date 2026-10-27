@@ -33,38 +33,41 @@ It also demonstrates a third, closely related pattern:
 
 ## Architecture
 
-Four Maven modules in a reactor. The arrows show the **only** compile dependencies —
-note the test module depends on the API contract, never on the service:
+The reactor has two top-level modules: **`cujex-core`** (the published library) and
+**`examples`** — an aggregator that groups the four order-service modules demonstrating
+it. The arrows below show the **only** compile dependencies — note the test module
+depends on the API contract and the reusable framework, never on the service:
 
 ```
-                      ┌────────────────────────────────────────┐
-                      │        order-service-api-model         │
-                      │        pure records, no Spring         │
-                      │              (api.model)               │
-                      └────────────────────┬───────────────────┘
-                                           │
-                ┌──────────────────────────┴─────────────────────────┐
-                ▼ depends on                            depends on   ▼
-    ┌──────────────────────┐                          ┌────────────────────────────┐
-    │    order-service     │                          │  order-service-api-client  │
-    │ Spring Boot web app  │                          │   @HttpExchange client +   │
-    │   (runs in Docker)   │                          │  Spring Boot auto-config   │
-    └───────────┬──────────┘                          └──────────────┬─────────────┘
-                │                                                    │ test scope
-                │                                                    ▼
-                │                                  ┌─────────────────┬────────────────┐
-                │ REST / HTTP                      │         order-service-it         │
-                └─────────────────────────────────▶│    Cucumber + JEXL e2e tests     │
-                                                   │  Testcontainers starts service   │
-                                                   └──────────────────────────────────┘
+  ┌────────────────────────┐          ┌────────────────────────────────────────┐
+  │      cujex-core         │          │        order-service-api-model         │
+  │ reusable Cucumber+JEXL  │          │        pure records, no Spring         │
+  │ framework (io.github.   │          │              (api.model)               │
+  │ dominys.cujex), no      │          └────────────────────┬───────────────────┘
+  │ domain knowledge        │                               │
+  └───────────┬─────────────┘    ┌──────────────────────────┴─────────────────────────┐
+              │ test scope       ▼ depends on                            depends on   ▼
+              │       ┌──────────────────────┐                  ┌────────────────────────────┐
+              │       │    order-service     │                  │  order-service-api-client  │
+              │       │ Spring Boot web app  │                  │   @HttpExchange client +   │
+              │       │   (runs in Docker)   │                  │  Spring Boot auto-config   │
+              │       └───────────┬──────────┘                  └──────────────┬─────────────┘
+              │                   │                                            │ test scope
+              │                   │                                            ▼
+              │                   │                          ┌─────────────────┬────────────────┐
+              │                   │ REST / HTTP              │         order-service-it         │
+              │                   └─────────────────────────▶│    Cucumber + JEXL e2e tests     │
+              └──────────────────────────────────────────────▶  Testcontainers starts service   │
+                                                             └──────────────────────────────────┘
 ```
 
 | Module | Packaging | Role |
 |--------|-----------|------|
+| `cujex-core` | jar | **Cujex** — the reusable, domain-agnostic Cucumber + JEXL framework (`io.github.dominys.cujex`): scenario context storage, per-cell JEXL preprocessing, typed data-table mapping, the JSON template engine, and the generic creation/validation steps. Knows nothing about orders; any suite can depend on it. |
 | `order-service-api-model` | jar | Pure API model records (`api.model`) — Jackson + Lombok, **no Spring**. Any client, Spring or not, can reuse the exact wire model. |
 | `order-service-api-client` | jar | The **declarative HTTP client** (`api.client`): the `@HttpExchange` `OrderApi`, a factory, and **Spring Boot auto-configuration**. Depends on the model module. The only production artifact the tests depend on. |
 | `order-service` | jar (Boot) | A tiny Spring Boot web app exposing `/orders`. Packaged into a Docker image. Depends on `order-service-api-model`. |
-| `order-service-it` | jar | The Cucumber + JEXL test suite. Depends on `order-service-api-client` at **test scope** only; starts the service container and drives it over REST. |
+| `order-service-it` | jar | The **example** Cucumber + JEXL test suite. Depends on `cujex-core` and `order-service-api-client` at **test scope** only, adds its own order-specific glue (`OrderSteps`, `OrderTypes`), starts the service container and drives it over REST. |
 
 Because `order-service-it` never has `order-service` on its classpath, the compiler
 physically prevents a test from reaching into service internals — the only way to
@@ -78,7 +81,7 @@ interact with the service is through the REST client.
 ./mvnw verify
 ```
 
-This builds all four modules, packages the service into a Docker image, starts it
+This builds all five modules, packages the service into a Docker image, starts it
 in a container, and runs the five feature files through the glue in
 `org.dominys.ittests`. An HTML report is written to
 `order-service-it/target/cucumber.html`.
@@ -131,7 +134,7 @@ Environment variables**), one per row:
 To skip the container and point the suite at any running instance:
 
 ```bash
-./mvnw -pl order-service-it verify -Dservice.baseUrl=http://localhost:8080
+./mvnw -pl examples/order-service-it verify -Dservice.baseUrl=http://localhost:8080
 ```
 
 See `harness/ServiceUnderTest.java` — `-Dservice.baseUrl` short-circuits the container.
@@ -141,64 +144,70 @@ See `harness/ServiceUnderTest.java` — `-Dservice.baseUrl` short-circuits the c
 ## Project layout
 
 ```
-pom.xml                                        # parent reactor: modules, BOMs, plugin mgmt
+pom.xml                                        # parent reactor: 2 modules (cujex-core + examples), BOMs, plugin mgmt
 
-order-service-api-model/
-  src/main/java/org/dominys/ittests/api/
-    model/   Order.java, Customer.java, OrderStatus.java
-                                               # records + Lombok @Builder/@Jacksonized, no Spring
-
-order-service-api-client/
-  src/main/java/org/dominys/ittests/api/
-    client/  OrderApi.java                      #   @HttpExchange declarative REST interface
-             OrderServiceClient.java            #   builds the client proxy from a base URL
-             OrderServiceClientProperties.java  #   @ConfigurationProperties("order-service")
-             OrderServiceClientAutoConfiguration.java  # @AutoConfiguration exposing OrderApi
-  src/main/resources/META-INF/spring/
-    ...AutoConfiguration.imports               #   registers the auto-configuration
-
-order-service/
-  Dockerfile                                   # eclipse-temurin:21-jre, COPY target/*.jar
-  src/main/java/org/dominys/ittests/service/
-    Application.java                            # @SpringBootApplication
-    OrderController.java                        # @RestController mirroring OrderApi
-    OrderService.java                           # in-memory store (the SUT logic)
-
-order-service-it/
-  src/test/java/org/dominys/ittests/
-    RunCucumberIT.java                          # JUnit Platform suite (entry point)
-    harness/                                    # boots the SUT + Spring wiring
-      ServiceUnderTest.java                     #   resolves base URL (container or override)
-      TestConfig.java                           #   Spring test context; provides OrderApi bean
-      CucumberSpringConfiguration.java          #   @CucumberContextConfiguration + reset hook
+cujex-core/                                    # Cujex: the reusable framework (io.github.dominys) — the PRODUCT
+  src/main/java/io/github/dominys/cujex/
+    CujexCoreConfig.java                        # @Configuration @ComponentScan — the one @Import a suite needs
     context/                                    # concept #1: scenario context storage
       ScenarioContextStore.java                 #   per-scenario key/value store
       ScenarioContext.java                      #   JEXL engine: ${...} resolution + editing
       StepVariables.java                        #   data-table type for "define variables"
     jexl/                                       # concept #2: JEXL preprocessing
       CucJexlFunctions.java                     #   custom JEXL functions (now(), uuid(), ...)
-    cucumber/                                   # Cucumber parameter/data-table plumbing
-      ParameterTypes.java                       #   ObjectMapper + @ParameterType/@DataTableType
+    cucumber/                                   # generic Cucumber parameter/data-table plumbing
+      ParameterTypes.java                       #   ObjectMapper + reusable resolveRow/toRecord helpers
       BaseCucRecord.java, EditFieldsRecord.java #   table-row <-> record mapping
       CucConstants.java, CucIdsToListDeserializer.java
     template/                                   # concept #3: JSON request/response stubs
       JsonTemplate.java                         #   self-loading stub (reads @descriptor) + overrides
       JsonStubRef.java                          #   row record for the "load JSON stubs" table
-    steps/
-      BaseSteps.java                            #   access to context + store
+    steps/                                      # domain-agnostic steps
+      BaseSteps.java                            #   access to context + store (extension base)
       InfraSteps.java                           #   "I define scenario variables:"
       GeneralValidationSteps.java               #   generic assertions
       ModelValidationSteps.java                 #   "I expect models match:" table assertions
-      OrderSteps.java                           #   domain steps driving the REST client
       TemplateSteps.java                        #   "load JSON stubs" / "create models from template"
-  src/test/resources/features/
-    01_context_storage.feature                  # store / reference / read-back loop
-    02_jexl_preprocessing.feature               # functions, literals, nested navigation
-    03_field_editing.feature                    # edit selected fields of a stored entity
-    04_end_to_end.feature                       # capstone tying it all together
-    05_json_templates.feature                   # load a stub, override only relevant fields
-  src/test/resources/stubs/
-    order_request.json                          # shared "success request" stub
+
+examples/                                      # aggregator (pom) — runnable examples, NOT published
+  pom.xml                                       #   groups the order-service-* modules below
+  order-service-api-model/
+    src/main/java/org/dominys/ittests/api/
+      model/   Order.java, Customer.java, OrderStatus.java
+                                               #   records + Lombok @Builder/@Jacksonized, no Spring
+  order-service-api-client/
+    src/main/java/org/dominys/ittests/api/
+      client/  OrderApi.java                    #   @HttpExchange declarative REST interface
+               OrderServiceClient.java          #   builds the client proxy from a base URL
+               OrderServiceClientProperties.java #   @ConfigurationProperties("order-service")
+               OrderServiceClientAutoConfiguration.java  # @AutoConfiguration exposing OrderApi
+    src/main/resources/META-INF/spring/
+      ...AutoConfiguration.imports             #   registers the auto-configuration
+  order-service/
+    Dockerfile                                 #   eclipse-temurin:21-jre, COPY target/*.jar
+    src/main/java/org/dominys/ittests/service/
+      Application.java                          #   @SpringBootApplication
+      OrderController.java                      #   @RestController mirroring OrderApi
+      OrderService.java                         #   in-memory store (the SUT logic)
+  order-service-it/                            # the EXAMPLE suite consuming cujex-core
+    src/test/java/org/dominys/ittests/
+      RunCucumberIT.java                        #   JUnit Platform suite; glue = example + cujex packages
+      harness/                                  #   boots the SUT + Spring wiring
+        ServiceUnderTest.java                   #     resolves base URL (container or override)
+        TestConfig.java                         #     @Import(CujexCoreConfig) + provides OrderApi bean
+        CucumberSpringConfiguration.java        #     @CucumberContextConfiguration + reset hook
+      cucumber/
+        OrderTypes.java                         #   EXTENSION POINT: order/customer @ParameterType + @DataTableType
+      steps/
+        OrderSteps.java                         #   domain steps driving the REST client (extends BaseSteps)
+    src/test/resources/features/
+      01_context_storage.feature                #   store / reference / read-back loop
+      02_jexl_preprocessing.feature             #   functions, literals, nested navigation
+      03_field_editing.feature                  #   edit selected fields of a stored entity
+      04_end_to_end.feature                     #   capstone tying it all together
+      05_json_templates.feature                 #   load a stub, override only relevant fields
+    src/test/resources/stubs/
+      order_request.json                        #   shared "success request" stub
 ```
 
 ---
@@ -583,8 +592,76 @@ everything it needs from the file.
 
 ## Extending the infrastructure
 
+`cujex-core` is domain-agnostic: it ships the context store, JEXL engine, template
+loader and generic steps, but knows nothing about orders. A new suite consumes it and
+adds only its own domain glue. This example module (`order-service-it`) **is** that
+extension — use it as the template.
+
+### Wiring a new suite onto `cujex-core`
+
+1. **Depend on it** (test scope):
+   ```xml
+   <dependency>
+       <groupId>io.github.dominys</groupId>
+       <artifactId>cujex-core</artifactId>
+       <scope>test</scope>
+   </dependency>
+   ```
+2. **Import the Spring config** from your `@CucumberContextConfiguration` context so the
+   context store, JEXL functions and generic steps get picked up (see `TestConfig`):
+   ```java
+   @Import(CujexCoreConfig.class)
+   ```
+3. **Add both glue packages to the Cucumber glue path** — your own plus the framework's
+   (see `RunCucumberIT`):
+   ```java
+   @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.acme.it, io.github.dominys.cujex")
+   ```
+
+### Register a domain type (tables / params) — the `OrderTypes` pattern
+
+Write a small glue class that autowires `ScenarioContext` and reuses the static
+`ParameterTypes.toRecord(...)` / `resolveRow(...)` helpers. **Do not extend
+`ParameterTypes`** — Cucumber would double-register the inherited `@DataTableType` /
+`@DefaultParameterTransformer` methods and fail. Keep them as independent glue classes
+(`OrderTypes` is the canonical example):
+
+```java
+public class OrderTypes {
+
+    private final ScenarioContext scenarioContext;
+
+    @Autowired
+    public OrderTypes(ScenarioContext scenarioContext) {
+        this.scenarioContext = scenarioContext;
+    }
+
+    // inline {myDto} parameter:
+    @ParameterType(value = ".*", name = "myDto")
+    public MyDto myDto(String ref) {
+        return scenarioContext.resolveField(ref);
+    }
+
+    // data-table row -> typed record:
+    @DataTableType
+    public BaseCucRecord<MyDto> myDtoRecord(Map<String, String> row) {
+        return ParameterTypes.toRecord(row, scenarioContext, new TypeReference<>() {});
+    }
+}
+```
+For field editing (`EditFieldsRecord` / the edit steps) to work, the DTO needs a builder
+whose setter method names equal the field names. The api model records get this for free
+from Lombok `@Builder(toBuilder = true)` + `@Jacksonized` (see `Order`/`Customer`).
+
+### Add a domain step
+
+Extend `io.github.dominys.cujex.steps.BaseSteps` (gives you the autowired
+`ScenarioContext` + `ScenarioContextStore`) and add your `@Given`/`@When`/`@Then`
+methods — `OrderSteps` is the example driving the REST client.
+
 ### Add a JEXL function
-Add a `public static` method to `CucJexlFunctions` — no other wiring needed:
+Add a `public static` method to `CucJexlFunctions` in `cujex-core` — no other wiring
+needed:
 
 ```java
 public static String upper(String s) { return s.toUpperCase(); }
@@ -597,27 +674,6 @@ Keep the contract in lock-step across modules:
 1. Add the method to `OrderApi` (client module) with explicitly-named parameters.
 2. Mirror it in `OrderController` (service module).
 3. Use it from a step via the autowired `OrderApi`.
-
-### Accept a new entity type in tables / params
-In `ParameterTypes`:
-
-```java
-// as a data-table row:
-@DataTableType
-public BaseCucRecord<MyDto> myDtoRecord(Map<String, String> row) {
-    return convertToTypedRecord(row, new TypeReference<>() {});
-}
-
-// as an inline {myDto} parameter:
-@ParameterType(value = ".*", name = "myDto")
-public MyDto myDto(String s) {
-    return scenarioContext.resolveField(s);
-}
-```
-For editing to work (`updateRecordBuilderFields`), the DTO needs a builder whose
-setter method names equal the field names. The api model records get this for free from
-Lombok `@Builder(toBuilder = true)` + `@Jacksonized` (see `Order`/`Customer`), which
-generate a field-named, prefix-less builder and wire Jackson to deserialize through it.
 
 ---
 
