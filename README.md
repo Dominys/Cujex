@@ -1,9 +1,15 @@
-# it-tests-example
+# it-tests-example — powered by Cujex
 
 A small, self-contained example of how to write **e2e / service-level tests** with
 **Cucumber** and a **JEXL** preprocessing layer. The infrastructure here is extracted
 and decoupled from a real project (`banner-service-integration-tests`) so it can serve
 as documented, runnable reference material.
+
+> **Cujex** (**Cu**cumber + **Jex**l) is the name of the reusable test infrastructure
+> showcased in this repo — the scenario context store, the JEXL preprocessing layer, the
+> JSON-template engine, and the decomposition DSL for building and validating models from
+> tables. This repository is a runnable *example* of using Cujex to test a sample
+> `order-service`.
 
 Unlike a classic unit test, the test module here **cannot see the service classes at
 all**. The service runs as a **Spring Boot web app inside a Docker container**
