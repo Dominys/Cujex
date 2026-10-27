@@ -22,29 +22,38 @@ The two patterns it is built to teach:
 
 ## Architecture
 
-Three Maven modules in a reactor. The arrows show the **only** compile dependencies —
+Four Maven modules in a reactor. The arrows show the **only** compile dependencies —
 note the test module depends on the API contract, never on the service:
 
 ```
-                 ┌───────────────────────┐
-                 │   order-service-api    │   shared contract (model + HTTP client)
-                 │  api.model / api.client│
-                 └───────────┬───────────┘
-                depends on   │   depends on (test scope)
-          ┌──────────────────┘        └──────────────────┐
-          ▼                                               ▼
-┌───────────────────────┐                      ┌───────────────────────┐
-│     order-service      │   REST / HTTP        │    order-service-it    │
-│  Spring Boot web app   │◀─────────────────────│  Cucumber + JEXL e2e   │
-│  (runs in Docker)      │   Testcontainers     │  tests                 │
-└───────────────────────┘                      └───────────────────────┘
+                      ┌────────────────────────────────────────┐
+                      │        order-service-api-model         │
+                      │        pure records, no Spring         │
+                      │              (api.model)               │
+                      └────────────────────┬───────────────────┘
+                                           │
+                ┌──────────────────────────┴─────────────────────────┐
+                ▼ depends on                            depends on   ▼
+    ┌──────────────────────┐                          ┌────────────────────────────┐
+    │    order-service     │                          │  order-service-api-client  │
+    │ Spring Boot web app  │                          │   @HttpExchange client +   │
+    │   (runs in Docker)   │                          │  Spring Boot auto-config   │
+    └───────────┬──────────┘                          └──────────────┬─────────────┘
+                │                                                    │ test scope
+                │                                                    ▼
+                │                                  ┌─────────────────┬────────────────┐
+                │ REST / HTTP                      │         order-service-it         │
+                └─────────────────────────────────▶│    Cucumber + JEXL e2e tests     │
+                                                   │  Testcontainers starts service   │
+                                                   └──────────────────────────────────┘
 ```
 
 | Module | Packaging | Role |
 |--------|-----------|------|
-| `order-service-api` | jar | The shared contract: API model records (`api.model`) and a **declarative HTTP client** (`api.client`). The only production artifact the tests are allowed to depend on. |
-| `order-service` | jar (Boot) | A tiny Spring Boot web app exposing `/orders`. Packaged into a Docker image. Depends on the api module. |
-| `order-service-it` | jar | The Cucumber + JEXL test suite. Depends on `order-service-api` at **test scope** only; starts the service container and drives it over REST. |
+| `order-service-api-model` | jar | Pure API model records (`api.model`) — Jackson + Lombok, **no Spring**. Any client, Spring or not, can reuse the exact wire model. |
+| `order-service-api-client` | jar | The **declarative HTTP client** (`api.client`): the `@HttpExchange` `OrderApi`, a factory, and **Spring Boot auto-configuration**. Depends on the model module. The only production artifact the tests depend on. |
+| `order-service` | jar (Boot) | A tiny Spring Boot web app exposing `/orders`. Packaged into a Docker image. Depends on `order-service-api-model`. |
+| `order-service-it` | jar | The Cucumber + JEXL test suite. Depends on `order-service-api-client` at **test scope** only; starts the service container and drives it over REST. |
 
 Because `order-service-it` never has `order-service` on its classpath, the compiler
 physically prevents a test from reaching into service internals — the only way to
@@ -96,12 +105,19 @@ See `harness/ServiceUnderTest.java` — `-Dservice.baseUrl` short-circuits the c
 ```
 pom.xml                                        # parent reactor: modules, BOMs, plugin mgmt
 
-order-service-api/
+order-service-api-model/
   src/main/java/org/dominys/ittests/api/
     model/   Order.java, Customer.java, OrderStatus.java
-                                               # records + Lombok @Builder/@Jacksonized
+                                               # records + Lombok @Builder/@Jacksonized, no Spring
+
+order-service-api-client/
+  src/main/java/org/dominys/ittests/api/
     client/  OrderApi.java                      #   @HttpExchange declarative REST interface
              OrderServiceClient.java            #   builds the client proxy from a base URL
+             OrderServiceClientProperties.java  #   @ConfigurationProperties("order-service")
+             OrderServiceClientAutoConfiguration.java  # @AutoConfiguration exposing OrderApi
+  src/main/resources/META-INF/spring/
+    ...AutoConfiguration.imports               #   registers the auto-configuration
 
 order-service/
   Dockerfile                                   # eclipse-temurin:21-jre, COPY target/*.jar
@@ -143,7 +159,7 @@ order-service-it/
 
 ## How the test talks to the service
 
-### The declarative client (`order-service-api`)
+### The declarative client (`order-service-api-client`)
 
 The client is an **HTTP interface**: `OrderApi` describes the REST contract with
 annotations, and Spring generates a proxy that performs the actual calls. No hand-written
@@ -165,8 +181,37 @@ public interface OrderApi {
 `HttpServiceProxyFactory` and returns a ready `OrderApi`.
 
 > **Tip:** always give `@PathVariable`/`@RequestParam` an explicit name. Parameter
-> names are not retained in bytecode unless compiled with `-parameters`, and the api
+> names are not retained in bytecode unless compiled with `-parameters`, and the client
 > module is consumed as a plain jar — explicit names keep the client robust.
+
+### Spring Boot auto-configuration
+
+The client module also ships **Spring Boot auto-configuration**, built the way the
+Spring Boot docs recommend for a library: an `@AutoConfiguration` class registered in
+`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
+(never component-scanned), guarded by conditions so it stays out of the way.
+
+A **Spring Boot** consumer then needs nothing but this jar on the classpath and one
+property — no client wiring code:
+
+```yaml
+order-service:
+  base-url: http://localhost:8080
+```
+
+`OrderServiceClientAutoConfiguration` reads `order-service.base-url`
+(`OrderServiceClientProperties`) and contributes an `OrderApi` bean. It is
+`@ConditionalOnProperty` (dormant until the base URL is set) and
+`@ConditionalOnMissingBean` (backs off if the application defines its own `OrderApi`).
+
+Those conditions are unit-tested with Spring Boot's `ApplicationContextRunner`
+(`OrderServiceClientAutoConfigurationTest`), which exercises each branch — property set
+→ bean present, property missing → dormant, user bean → backs off, and property binding —
+without starting a server or making any HTTP call.
+
+> This e2e suite uses a **plain** Spring context (`cucumber-spring`, no Boot), so it
+> wires the bean explicitly in `TestConfig` rather than through auto-configuration —
+> see below. The auto-configuration exists for real Spring Boot consumers of the client.
 
 ### Starting the service (`ServiceUnderTest`)
 
@@ -277,7 +322,7 @@ Use it as `${upper(`abc`)}`.
 ### Add an endpoint
 Keep the contract in lock-step across modules:
 
-1. Add the method to `OrderApi` (api module) with explicitly-named parameters.
+1. Add the method to `OrderApi` (client module) with explicitly-named parameters.
 2. Mirror it in `OrderController` (service module).
 3. Use it from a step via the autowired `OrderApi`.
 
@@ -307,7 +352,8 @@ generate a field-named, prefix-less builder and wire Jackson to deserialize thro
 ## Notes & gotchas
 
 - **Tests cannot import service classes.** This is enforced by the module graph:
-  `order-service-it` only has `order-service-api` on its classpath. Interact via `OrderApi`.
+  `order-service-it` only has `order-service-api-client` (and its transitive
+  `order-service-api-model`) on its classpath. Interact via `OrderApi`.
 - **Reactor build order matters.** `./mvnw verify` from the root builds the service jar
   *before* the IT module builds the Docker image from it. Running the IT module in
   isolation requires the service jar to already be installed.

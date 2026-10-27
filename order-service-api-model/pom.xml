@@ -10,14 +10,13 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>order-service-api</artifactId>
+    <artifactId>order-service-api-model</artifactId>
 
-    <name>order-service-api</name>
+    <name>order-service-api-model</name>
     <description>
-        Shared contract between the service and its tests: the API model records
-        plus a declarative REST client. This is the ONLY production artifact the
-        test module is allowed to depend on, which keeps the tests at arm's length
-        from the service implementation.
+        Pure API model records (no Spring). Deserialized with Jackson and built
+        with Lombok. Packaged on its own so any client - Spring or not - can reuse
+        the exact same wire model.
     </description>
 
     <dependencies>
@@ -30,12 +29,6 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
-        </dependency>
-
-        <!-- The declarative client is built from Spring's HTTP interface support. -->
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-web</artifactId>
         </dependency>
     </dependencies>
 

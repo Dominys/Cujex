@@ -16,7 +16,8 @@
     </description>
 
     <modules>
-        <module>order-service-api</module>
+        <module>order-service-api-model</module>
+        <module>order-service-api-client</module>
         <module>order-service</module>
         <module>order-service-it</module>
     </modules>
@@ -47,7 +48,12 @@
             <!-- Our own modules -->
             <dependency>
                 <groupId>org.dominys</groupId>
-                <artifactId>order-service-api</artifactId>
+                <artifactId>order-service-api-model</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.dominys</groupId>
+                <artifactId>order-service-api-client</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

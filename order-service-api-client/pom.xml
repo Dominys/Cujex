@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.dominys</groupId>
+        <artifactId>it-tests-example</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>order-service-api-client</artifactId>
+
+    <name>order-service-api-client</name>
+    <description>
+        Spring declarative REST client for the Order service (the @HttpExchange
+        OrderApi plus a factory), together with Spring Boot auto-configuration so
+        a Boot application only needs this dependency and an "order-service.base-url"
+        property to get a ready-to-use OrderApi bean.
+    </description>
+
+    <dependencies>
+        <!-- The wire model this client sends and receives. -->
+        <dependency>
+            <groupId>org.dominys</groupId>
+            <artifactId>order-service-api-model</artifactId>
+        </dependency>
+
+        <!-- The declarative client is built from Spring's HTTP interface support. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+
+        <!-- Spring Boot auto-configuration: @AutoConfiguration, @ConditionalOnMissingBean,
+             @ConfigurationProperties. Optional so non-Boot consumers that only want the
+             OrderApi interface and the factory are not forced to pull Boot onto their
+             classpath - the auto-configuration simply stays dormant without it. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Generates configuration metadata for the properties below (IDE hints). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Tests: ApplicationContextRunner drives the auto-configuration through its
+             conditions without starting a real server or issuing any HTTP calls. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

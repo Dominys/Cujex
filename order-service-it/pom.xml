@@ -14,18 +14,19 @@
 
     <name>order-service-it</name>
     <description>
-        Cucumber + JEXL service-level (e2e) tests. Depends ONLY on order-service-api,
+        Cucumber + JEXL service-level (e2e) tests. Depends ONLY on order-service-api-client,
         so it can never reach into the service implementation - it talks to a running
         service over REST. The service is started in a Docker container by
         Testcontainers (or overridden with -Dservice.baseUrl).
     </description>
 
     <dependencies>
-        <!-- The one and only production dependency: the shared contract. Depending
-             on order-service here would defeat the whole point, so we do not. -->
+        <!-- The one and only production dependency: the shared contract (the Spring
+             client, which transitively brings the API model). Depending on
+             order-service here would defeat the whole point, so we do not. -->
         <dependency>
             <groupId>org.dominys</groupId>
-            <artifactId>order-service-api</artifactId>
+            <artifactId>order-service-api-client</artifactId>
             <scope>test</scope>
         </dependency>
 
