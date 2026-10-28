@@ -29,7 +29,12 @@ import java.util.stream.IntStream;
  * <p>Three responsibilities:
  * <ul>
  *     <li><b>{@link #OBJECT_MAPPER}</b> - the single Jackson mapper used everywhere
- *         to convert maps/rows into records. Configure modules/features here once.</li>
+ *         to convert maps/rows into records. Deliberately a shared, extensible
+ *         singleton: a suite may register custom modules/deserializers on it (see
+ *         {@link CucIdsToListDeserializer}). Jackson's {@code ObjectMapper} is
+ *         thread-safe once configured, so treat configuration as one-time setup -
+ *         register modules and set features during glue initialization, never
+ *         mutate it mid-scenario.</li>
  *     <li><b>{@code @ParameterType} methods</b> - convert inline step arguments like
  *         {@code {order}} by JEXL-resolving them against the scenario context.</li>
  *     <li><b>{@code @DataTableType} methods</b> - convert data-table rows into typed
@@ -50,9 +55,19 @@ import java.util.stream.IntStream;
  * </ul>
  * See the example module's {@code OrderTypes} for a worked extension.
  */
+// Discovered by cucumber-spring as a glue class (glue packages are scanned
+// automatically), so no @Component/@ComponentScan is required. @Scope ties the
+// bean's lifecycle to the Cucumber glue scope: a fresh instance per scenario,
+// matching the scenario-scoped ScenarioContext it depends on.
 @Scope("cucumber-glue")
 public class ParameterTypes {
 
+    /**
+     * The single, shared Jackson mapper for the whole suite. Intentionally public and
+     * mutable so suites can extend it (e.g. register a module or custom deserializer)
+     * once at setup; it is thread-safe for conversion once configured. Do not reconfigure
+     * it per scenario.
+     */
     public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .configure(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS, false)

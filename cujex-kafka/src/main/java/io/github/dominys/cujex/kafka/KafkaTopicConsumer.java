@@ -114,6 +114,7 @@ final class KafkaTopicConsumer {
             // expected on stop()
         } catch (RuntimeException e) {
             LOG.log(System.Logger.Level.ERROR, "Cujex Kafka poll loop for topic '" + topic + "' failed", e);
+            bus.reportFailure(topic, e);
         } finally {
             consumer.close();
         }

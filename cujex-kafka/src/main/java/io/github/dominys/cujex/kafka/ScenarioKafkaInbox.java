@@ -27,10 +27,12 @@ public class ScenarioKafkaInbox implements AutoCloseable {
 
     private final ConcurrentLinkedQueue<KafkaMessage> received = new ConcurrentLinkedQueue<>();
     private final Duration defaultTimeout;
+    private final KafkaMessageBus bus;
     private final AutoCloseable registration;
 
     public ScenarioKafkaInbox(KafkaMessageBus bus, CujexKafkaSettings settings) {
         this.defaultTimeout = settings.messageAwaitTimeout();
+        this.bus = bus;
         this.registration = bus.register(received::add);
     }
 
@@ -44,7 +46,15 @@ public class ScenarioKafkaInbox implements AutoCloseable {
         return Awaitility.await("Kafka message matching scenario criteria")
                 .atMost(timeout)
                 .pollInterval(Duration.ofMillis(100))
-                .until(() -> firstMatch(criteria), Objects::nonNull);
+                .until(() -> {
+                    var match = firstMatch(criteria);
+                    if (match == null) {
+                        // A dead topic consumer never delivers again; fail fast with the
+                        // real cause instead of exhausting the timeout.
+                        bus.verifyHealthy();
+                    }
+                    return match;
+                }, Objects::nonNull);
     }
 
     /** All messages received so far that match {@code criteria} (useful for assertions on counts). */

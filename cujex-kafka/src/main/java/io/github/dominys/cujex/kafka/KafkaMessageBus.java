@@ -20,6 +20,8 @@ public class KafkaMessageBus {
 
     private final Set<Consumer<KafkaMessage>> sinks = ConcurrentHashMap.newKeySet();
 
+    private volatile ConsumerFailure failure;
+
     /**
      * Subscribe a sink (an inbox) to every message. The returned handle removes
      * the sink when closed; call it from the scenario's teardown.
@@ -32,5 +34,31 @@ public class KafkaMessageBus {
     /** Fan a message out to every currently-registered sink. */
     public void publish(KafkaMessage message) {
         sinks.forEach(sink -> sink.accept(message));
+    }
+
+    /**
+     * Record that a topic consumer's poll loop has died. There is one consumer per
+     * topic for the whole run, so a dead consumer means no further messages will ever
+     * arrive; capturing the cause here lets waiters fail fast with the real reason
+     * instead of silently timing out.
+     */
+    public void reportFailure(String topic, Throwable cause) {
+        this.failure = new ConsumerFailure(topic, cause);
+    }
+
+    /**
+     * Throw if any topic consumer has died, surfacing the original cause. Called by
+     * inboxes while awaiting a message so scenarios fail fast rather than time out.
+     */
+    public void verifyHealthy() {
+        var current = failure;
+        if (current != null) {
+            throw new IllegalStateException(
+                    "Cujex Kafka consumer for topic '" + current.topic()
+                            + "' has stopped; no further messages will arrive", current.cause());
+        }
+    }
+
+    private record ConsumerFailure(String topic, Throwable cause) {
     }
 }

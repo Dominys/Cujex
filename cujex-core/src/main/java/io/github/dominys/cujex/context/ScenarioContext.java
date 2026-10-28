@@ -62,8 +62,12 @@ import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
 @Scope("cucumber-glue")
 public class ScenarioContext {
 
-    /** Matches a cell that is entirely a {@code ${ ... }} expression. */
-    public static final String CALCULATED_FIELD_PATTERN = "^\\$\\{(.+?)\\}$";
+    /**
+     * Matches a cell that is entirely a {@code ${ ... }} expression. Intended for use
+     * with {@link java.util.regex.Matcher#matches()} (which anchors at both ends), so
+     * the group captures the inner expression of a whole-cell reference.
+     */
+    public static final String CALCULATED_FIELD_PATTERN = "\\$\\{(.+?)\\}";
     private static final Pattern PATTERN = Pattern.compile(CALCULATED_FIELD_PATTERN);
 
     private final JexlEngine jexl;
