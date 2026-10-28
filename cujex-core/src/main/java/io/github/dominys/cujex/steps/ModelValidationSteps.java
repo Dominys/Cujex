@@ -2,6 +2,8 @@ package io.github.dominys.cujex.steps;
 
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Then;
+import io.github.dominys.cujex.context.ScenarioContext;
+import io.github.dominys.cujex.context.ScenarioContextStore;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -35,7 +37,12 @@ import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
  * cell is an <em>expected</em> value asserted against the model stored under
  * {@code cucId}, not an override written into it.
  */
+@SuppressWarnings("java:S5960") // assertion steps are this library's purpose, shipped in main for reuse
 public class ModelValidationSteps extends BaseSteps {
+
+    public ModelValidationSteps(ScenarioContext scenarioContext, ScenarioContextStore scenarioStore) {
+        super(scenarioContext, scenarioStore);
+    }
 
     /**
      * One path segment: a field {@code name} with an optional {@code [index]}
@@ -104,36 +111,60 @@ public class ModelValidationSteps extends BaseSteps {
                           Map<String, String> scopeByColumn) {
         String scope = null;
         for (var i = 0; i < headers.size(); i++) {
-            var header = headers.get(i);
             var cell = i < cells.size() ? cells.get(i) : null;
-            if (CUC_REF_ID_FIELD.equals(header)) {
-                continue;
-            }
-            if (header.endsWith("[]")) {
-                var name = header.substring(0, header.length() - 2);
-                if (isBlank(cell)) {
-                    scope = scopeByColumn.get(header);
-                } else {
-                    scope = resolveCollectionScope(root, scopePath(scope, name, header), stripBrackets(cell));
-                    scopeByColumn.put(header, scope);
-                }
-            } else if (header.endsWith("#")) {
-                if (!isBlank(cell)) {
-                    assertSize(root, scopePath(scope, header.substring(0, header.length() - 1), header), cell);
-                }
-            } else if (header.endsWith(":")) {
-                scope = header.substring(0, header.length() - 1);
-            } else if (header.startsWith(".")) {
-                if (!isBlank(cell)) {
-                    assertValue(root, requireScope(scope, header) + header, cell);
-                }
-            } else {
-                scope = null;
-                if (!isBlank(cell)) {
-                    assertValue(root, header, cell);
-                }
-            }
+            scope = applyCell(root, headers.get(i), cell, scope, scopeByColumn);
         }
+    }
+
+    /**
+     * Applies a single header/cell pair against {@code root} and returns the active
+     * scope after it: collection and object openers return the scope they open,
+     * size and value assertions leave the scope unchanged, and a full root-path
+     * assertion clears it.
+     */
+    private String applyCell(Object root, String header, String cell, String scope,
+                             Map<String, String> scopeByColumn) {
+        if (CUC_REF_ID_FIELD.equals(header)) {
+            return scope;
+        }
+        if (header.endsWith("[]")) {
+            return applyCollectionHeader(root, header, cell, scope, scopeByColumn);
+        }
+        if (header.endsWith("#")) {
+            if (!isBlank(cell)) {
+                assertSize(root, scopePath(scope, header.substring(0, header.length() - 1), header), cell);
+            }
+            return scope;
+        }
+        if (header.endsWith(":")) {
+            return header.substring(0, header.length() - 1);
+        }
+        if (header.startsWith(".")) {
+            if (!isBlank(cell)) {
+                assertValue(root, requireScope(scope, header) + header, cell);
+            }
+            return scope;
+        }
+        if (!isBlank(cell)) {
+            assertValue(root, header, cell);
+        }
+        return null;
+    }
+
+    /**
+     * Opens (or re-enters) a collection scope for an {@code x[]} / {@code .child[]}
+     * header: a blank cell continues the element this column resolved on an earlier
+     * row, otherwise the cell selector resolves a fresh element.
+     */
+    private String applyCollectionHeader(Object root, String header, String cell, String scope,
+                                         Map<String, String> scopeByColumn) {
+        var name = header.substring(0, header.length() - 2);
+        if (isBlank(cell)) {
+            return scopeByColumn.get(header);
+        }
+        var resolved = resolveCollectionScope(root, scopePath(scope, name, header), stripBrackets(cell));
+        scopeByColumn.put(header, resolved);
+        return resolved;
     }
 
     /**
@@ -163,9 +194,10 @@ public class ModelValidationSteps extends BaseSteps {
         int index;
         if (selector.matches("\\d+")) {
             index = Integer.parseInt(selector);
-        } else if (selector.indexOf('=') > 0) {
-            var field = selector.substring(0, selector.indexOf('='));
-            var value = selector.substring(selector.indexOf('=') + 1);
+        } else if (selector.contains("=") && !selector.startsWith("=")) {
+            var eq = selector.indexOf('=');
+            var field = selector.substring(0, eq);
+            var value = selector.substring(eq + 1);
             index = matchIndex(asCollection(root, collection), field, value);
             if (index < 0) {
                 throw new IllegalStateException(

@@ -1,5 +1,6 @@
 package org.dominys.ittests.service;
 
+import lombok.RequiredArgsConstructor;
 import org.dominys.ittests.api.model.Order;
 import org.dominys.ittests.api.model.OrderStatus;
 import org.springframework.http.HttpStatus;
@@ -26,13 +27,10 @@ import java.util.NoSuchElementException;
  */
 @RestController
 @RequestMapping("/orders")
+@RequiredArgsConstructor
 public class OrderController {
 
     private final OrderService orderService;
-
-    public OrderController(OrderService orderService) {
-        this.orderService = orderService;
-    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

@@ -66,8 +66,13 @@ public final class ServiceUnderTest {
             var serviceModule = Path.of("..", "order-service");
             var image = new ImageFromDockerfile()
                     .withFileFromPath(".", serviceModule);
+            // Join Kafka's network and point the service at the in-network broker.
+            // Reaching KafkaUnderTest here guarantees the broker starts first.
             return new GenericContainer<>(image)
                     .withExposedPorts(SERVICE_PORT)
+                    .withNetwork(KafkaUnderTest.network())
+                    .withEnv("SPRING_KAFKA_BOOTSTRAP_SERVERS",
+                            KafkaUnderTest.internalBootstrapServers())
                     .waitingFor(Wait.forHttp("/actuator/health")
                             .forPort(SERVICE_PORT)
                             .forStatusCode(200)

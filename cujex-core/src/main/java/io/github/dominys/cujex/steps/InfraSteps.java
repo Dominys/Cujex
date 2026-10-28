@@ -1,5 +1,7 @@
 package io.github.dominys.cujex.steps;
 
+import io.github.dominys.cujex.context.ScenarioContext;
+import io.github.dominys.cujex.context.ScenarioContextStore;
 import io.github.dominys.cujex.context.StepVariables;
 
 import io.cucumber.java.en.Given;
@@ -8,6 +10,10 @@ import io.cucumber.java.en.Given;
  * Generic, domain-agnostic steps for seeding the scenario context.
  */
 public class InfraSteps extends BaseSteps {
+
+    public InfraSteps(ScenarioContext scenarioContext, ScenarioContextStore scenarioStore) {
+        super(scenarioContext, scenarioStore);
+    }
 
     /**
      * Stores an arbitrary set of named values into the scenario store. Each row's

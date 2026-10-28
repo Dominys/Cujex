@@ -31,7 +31,7 @@ import java.util.Map;
  */
 public class CujexJexlContext extends MapContext {
 
-    private final transient ScenarioContext scenarioContext;
+    private final ScenarioContext scenarioContext;
 
     CujexJexlContext(Map<String, Object> variables, ScenarioContext scenarioContext) {
         super(variables);

@@ -43,7 +43,7 @@ public class ContextAwareJexlFunctions implements CujexJexlFunctions {
 
     @Override
     public String namespace() {
-        return "ctx"; // callable as ${ctx:...}
+        return "ctx";
     }
 
     @Override

@@ -14,7 +14,7 @@ import io.cucumber.java.DefaultDataTableCellTransformer;
 import io.cucumber.java.DefaultDataTableEntryTransformer;
 import io.cucumber.java.DefaultParameterTransformer;
 import io.cucumber.java.ParameterType;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
 
 import java.lang.reflect.Type;
 import java.util.HashMap;
@@ -50,6 +50,7 @@ import java.util.stream.IntStream;
  * </ul>
  * See the example module's {@code OrderTypes} for a worked extension.
  */
+@Scope("cucumber-glue")
 public class ParameterTypes {
 
     public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
@@ -58,8 +59,11 @@ public class ParameterTypes {
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
             .configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
 
-    @Autowired
-    private ScenarioContext scenarioContext;
+    private final ScenarioContext scenarioContext;
+
+    public ParameterTypes(ScenarioContext scenarioContext) {
+        this.scenarioContext = scenarioContext;
+    }
 
     public static <T> T convertValue(Object fromValue, TypeReference<T> toValueType) {
         return OBJECT_MAPPER.convertValue(fromValue, toValueType);

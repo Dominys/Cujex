@@ -33,10 +33,11 @@ It also demonstrates a third, closely related pattern:
 
 ## Architecture
 
-The reactor has two top-level modules: **`cujex-core`** (the published library) and
-**`examples`** — an aggregator that groups the four order-service modules demonstrating
-it. The arrows below show the **only** compile dependencies — note the test module
-depends on the API contract and the reusable framework, never on the service:
+The reactor has three top-level modules: **`cujex-core`** (the published library),
+**`cujex-kafka`** (an opt-in messaging extension), and **`examples`** — an aggregator
+that groups the order-service modules demonstrating them. The arrows below show the
+**only** compile dependencies — note the test module depends on the API contract and
+the reusable framework, never on the service:
 
 ```
   ┌────────────────────────┐          ┌────────────────────────────────────────┐
@@ -64,10 +65,11 @@ depends on the API contract and the reusable framework, never on the service:
 | Module | Packaging | Role |
 |--------|-----------|------|
 | `cujex-core` | jar | **Cujex** — the reusable, domain-agnostic Cucumber + JEXL framework (`io.github.dominys.cujex`): scenario context storage, per-cell JEXL preprocessing, typed data-table mapping, the JSON template engine, and the generic creation/validation steps. Knows nothing about orders; any suite can depend on it. |
-| `order-service-api-model` | jar | Pure API model records (`api.model`) — Jackson + Lombok, **no Spring**. Any client, Spring or not, can reuse the exact wire model. |
+| `cujex-kafka` | jar | **Opt-in Kafka extension** (`io.github.dominys.cujex.kafka`), a sibling of core (not part of it): one long-lived consumer per topic, a fan-out bus, per-scenario filtering inboxes for parallel safety, a consumer-group-readiness wait (Kafka Admin), and a producer. Activated only by explicit `@Import`. |
+| `order-service-api-model` | jar | Pure API model records (`api.model`) — Jackson + Lombok, **no Spring**. Any client, Spring or not, can reuse the exact wire model. Also holds the Kafka wire types and topic names. |
 | `order-service-api-client` | jar | The **declarative HTTP client** (`api.client`): the `@HttpExchange` `OrderApi`, a factory, and **Spring Boot auto-configuration**. Depends on the model module. The only production artifact the tests depend on. |
-| `order-service` | jar (Boot) | A tiny Spring Boot web app exposing `/orders`. Packaged into a Docker image. Depends on `order-service-api-model`. |
-| `order-service-it` | jar | The **example** Cucumber + JEXL test suite. Depends on `cujex-core` and `order-service-api-client` at **test scope** only, adds its own order-specific glue (`OrderSteps`, `OrderTypes`), starts the service container and drives it over REST. |
+| `order-service` | jar (Boot) | A tiny Spring Boot web app exposing `/orders`. **Publishes** order events and **consumes** status-update commands over Kafka. Packaged into a Docker image. Depends on `order-service-api-model`. |
+| `order-service-it` | jar | The **example** Cucumber + JEXL test suite. Depends on `cujex-core`, `cujex-kafka` and `order-service-api-client` at **test scope** only, adds its own order-specific glue (`OrderSteps`, `OrderKafkaSteps`, `OrderTypes`), starts the service + Kafka containers and drives them over REST and Kafka. |
 
 Because `order-service-it` never has `order-service` on its classpath, the compiler
 physically prevents a test from reaching into service internals — the only way to
@@ -144,7 +146,7 @@ See `harness/ServiceUnderTest.java` — `-Dservice.baseUrl` short-circuits the c
 ## Project layout
 
 ```
-pom.xml                                        # parent reactor: 2 modules (cujex-core + examples), BOMs, plugin mgmt
+pom.xml                                        # parent reactor: 3 modules (cujex-core + cujex-kafka + examples), BOMs, plugin mgmt
 
 cujex-core/                                    # Cujex: the reusable framework (io.github.dominys) — the PRODUCT
   src/main/java/io/github/dominys/cujex/
@@ -169,12 +171,27 @@ cujex-core/                                    # Cujex: the reusable framework (
       ModelValidationSteps.java                 #   "I expect models match:" table assertions
       TemplateSteps.java                        #   "load JSON stubs" / "create models from template"
 
+cujex-kafka/                                   # Cujex Kafka extension — OPT-IN sibling of core, NOT part of it
+  src/main/java/io/github/dominys/cujex/kafka/
+    CujexKafkaConfig.java                       # lite @Bean config (no stereotype) — activated via explicit @Import
+    CujexKafkaSettings.java                     # record: bootstrap servers, topics to consume, consumer groups to await
+    KafkaConsumerGroupWaiter.java               # Kafka Admin + Awaitility: wait until groups STABLE with partitions
+    KafkaConsumerManager.java                   # suite lifecycle: start one consumer per topic, await groups, close
+    KafkaTopicConsumer.java                     # one long-lived consumer per topic for the whole run
+    KafkaMessageBus.java                        # fan-out: delivers each incoming message to all active scenario inboxes
+    KafkaMessage.java                           # record wrapping topic + raw byte[] key/value/headers (+ String & PayloadDecoder accessors)
+    ScenarioKafkaInbox.java                     # @Scope("cucumber-glue") per-scenario mailbox; Awaitility awaitMessage
+    KafkaProducerSupport.java                   # byte[] producer with String/byte[] overloads (acks=all, flush)
+    PayloadDecoder.java                         # opt-in byte[] -> T decoder (utf8 built-in); plug in Protobuf/Avro/JSON
+
 examples/                                      # aggregator (pom) — runnable examples, NOT published
   pom.xml                                       #   groups the order-service-* modules below
   order-service-api-model/
     src/main/java/org/dominys/ittests/api/
       model/   Order.java, Customer.java, OrderStatus.java
                                                #   records + Lombok @Builder/@Jacksonized, no Spring
+               OrderEvent.java, OrderEventType.java, StatusUpdateCommand.java, OrderTopics.java
+                                               #   Kafka wire types (notification events, status command, topic names)
   order-service-api-client/
     src/main/java/org/dominys/ittests/api/
       client/  OrderApi.java                    #   @HttpExchange declarative REST interface
@@ -188,24 +205,31 @@ examples/                                      # aggregator (pom) — runnable e
     src/main/java/org/dominys/ittests/service/
       Application.java                          #   @SpringBootApplication
       OrderController.java                      #   @RestController mirroring OrderApi
-      OrderService.java                         #   in-memory store (the SUT logic)
+      OrderService.java                          #   in-memory store (the SUT logic); publishes events on create/update
+      KafkaConfig.java                           #   NewTopic beans for the notification + status topics
+      OrderEventPublisher.java                   #   sends ORDER_CREATED / ORDER_STATUS_UPDATED notifications
+      OrderStatusListener.java                   #   @KafkaListener consuming StatusUpdateCommand
   order-service-it/                            # the EXAMPLE suite consuming cujex-core
     src/test/java/org/dominys/ittests/
       RunCucumberIT.java                        #   JUnit Platform suite; glue = example + cujex packages
       harness/                                  #   boots the SUT + Spring wiring
-        ServiceUnderTest.java                   #     resolves base URL (container or override)
-        TestConfig.java                         #     @Import(CujexCoreConfig) + provides OrderApi bean
+        ServiceUnderTest.java                   #     resolves base URL (container or override); joins Kafka network
+        KafkaUnderTest.java                     #     starts the broker (Testcontainers) before the service
+        TestConfig.java                         #     @Import(CujexCoreConfig, CujexKafkaConfig) + OrderApi + CujexKafkaSettings
         CucumberSpringConfiguration.java        #     @CucumberContextConfiguration + reset hook
       cucumber/
         OrderTypes.java                         #   EXTENSION POINT: order/customer @ParameterType + @DataTableType
       steps/
         OrderSteps.java                         #   domain steps driving the REST client (extends BaseSteps)
+        OrderKafkaSteps.java                     #   Kafka steps: send status command, await & store an order event
     src/test/resources/features/
       01_context_storage.feature                #   store / reference / read-back loop
       02_jexl_preprocessing.feature             #   functions, literals, nested navigation
       03_field_editing.feature                  #   edit selected fields of a stored entity
       04_end_to_end.feature                     #   capstone tying it all together
       05_json_templates.feature                 #   load a stub, override only relevant fields
+      06_custom_jexl_functions.feature           #   custom functions + namespace registration
+      07_kafka_messaging.feature                 #   produce/consume round-trips over Kafka
     src/test/resources/stubs/
       order_request.json                        #   shared "success request" stub
 ```
@@ -732,6 +756,96 @@ Keep the contract in lock-step across modules:
 1. Add the method to `OrderApi` (client module) with explicitly-named parameters.
 2. Mirror it in `OrderController` (service module).
 3. Use it from a step via the autowired `OrderApi`.
+
+### Messaging over Kafka (the `cujex-kafka` extension)
+
+Kafka support is **not** in `cujex-core` — it lives in a separate, opt-in sibling
+module, `cujex-kafka`. Core stays messaging-free; a suite that needs Kafka adds the
+extension explicitly. `07_kafka_messaging.feature` is the worked example.
+
+**What the extension provides**
+
+* **One long-lived consumer per topic for the whole run** (`KafkaTopicConsumer`,
+  managed by `KafkaConsumerManager`). Consumers are suite-singletons started once at
+  context refresh, not per scenario.
+* **A fan-out bus** (`KafkaMessageBus`) that delivers every incoming message to all
+  active scenario inboxes.
+* **A per-scenario inbox** (`ScenarioKafkaInbox`, `@Scope("cucumber-glue")`) that
+  buffers messages and exposes an **Awaitility**-backed `awaitMessage(predicate)`.
+  Each scenario filters to *its own* criteria (typically the order id it created), so
+  scenarios sharing a topic stay isolated — the suite is **parallel-safe**.
+* **A consumer-group-readiness wait** (`KafkaConsumerGroupWaiter`): because group
+  formation takes time, the manager uses the Kafka Admin API + Awaitility to block at
+  startup until every required group is `STABLE` with assigned partitions, before any
+  scenario runs.
+* **A simple producer** (`KafkaProducerSupport`, `acks=all`, flush) for driving input
+  topics from steps. It sends raw `byte[]`, with `String` overloads that UTF-8-encode
+  text/JSON so the common cases stay one-liners.
+* **A payload-agnostic transport.** `KafkaMessage` carries the record's raw `byte[]`
+  key/value — what Kafka actually transmits — so the harness is not tied to String/JSON.
+  Steps decode at the edge: `valueAsString()` for text/JSON, or `value(PayloadDecoder)`
+  for any binary format (e.g. `message.value(OrderEvent::parseFrom)` for **Protobuf**,
+  or an Avro/JSON reader). The fan-out bus and inbox stay format-neutral.
+
+**Wiring it onto a suite** (see `TestConfig` + the `order-service-it` harness)
+
+1. **Depend on it** (test scope), alongside a Kafka Testcontainer:
+   ```xml
+   <dependency>
+       <groupId>io.github.dominys</groupId>
+       <artifactId>cujex-kafka</artifactId>
+       <scope>test</scope>
+   </dependency>
+   <dependency>
+       <groupId>org.testcontainers</groupId>
+       <artifactId>testcontainers-kafka</artifactId>
+       <scope>test</scope>
+   </dependency>
+   ```
+2. **Import the lite config** (it has no stereotype, so it is activated only by an
+   explicit import — it never leaks into the core component-scan):
+   ```java
+   @Import({ CujexCoreConfig.class, CujexKafkaConfig.class })
+   ```
+3. **Provide a `CujexKafkaSettings` bean** naming the bootstrap servers, the topics to
+   consume, and the consumer groups to await:
+   ```java
+   @Bean
+   @DependsOn("orderApi")            // ensure the service container is up first
+   CujexKafkaSettings cujexKafkaSettings() {
+       return new CujexKafkaSettings(
+           KafkaUnderTest.bootstrapServers(),
+           List.of(OrderTopics.ORDER_EVENTS),
+           List.of("order-service"));
+   }
+   ```
+
+**Container ordering.** The broker must be up before the service (the service reads its
+bootstrap address from the environment) and before the Cujex consumers start. This is
+enforced entirely in the *example*, not the library: `ServiceUnderTest` joins the shared
+`KafkaUnderTest` network and passes the in-network bootstrap address as an env var
+(touching `KafkaUnderTest` starts the broker), and the `CujexKafkaSettings` bean is
+`@DependsOn("orderApi")` so the group-readiness wait only runs once the service is live.
+
+**Steps** (`OrderKafkaSteps`, extends `BaseSteps`)
+
+```gherkin
+When I send a status update command:
+  | orderId         | status |
+  | ${created.id()} | PAID   |
+
+Then I await an order event matching and store result in event:
+  | type          | orderId         | status |
+  | ORDER_CREATED | ${created.id()} | NEW    |
+```
+
+The await step builds a predicate from the table (every cell resolved through JEXL),
+reads each buffered message's value as a UTF-8 `String` and matches its JSON
+field-by-field; on the first match it decodes the event via a `PayloadDecoder`
+(`message.value(bytes -> OBJECT_MAPPER.readValue(bytes, OrderEvent.class))`) and stores
+it under the result key so later steps can assert on it with the generic validation
+steps. A Protobuf suite would swap only that decoder for `OrderEvent::parseFrom` — the
+rest of the extension is unchanged.
 
 ---
 

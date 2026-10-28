@@ -51,6 +51,9 @@ public record JsonTemplate(ObjectNode base, Class<?> type) {
 
     private static final String STUB_LOCATION = "/stubs/%s.json";
 
+    /** Regex named group holding a segment's optional {@code [index]}. */
+    private static final String INDEX_GROUP = "index";
+
     /**
      * Loads the stub named {@code file} from {@code src/test/resources/stubs},
      * reads its descriptor to discover the model type, and returns a reusable
@@ -125,11 +128,11 @@ public record JsonTemplate(ObjectNode base, Class<?> type) {
                 return null;
             }
             node = node.get(matcher.group("name"));
-            if (matcher.group("index") != null) {
+            if (matcher.group(INDEX_GROUP) != null) {
                 if (!(node instanceof ArrayNode array)) {
                     return null;
                 }
-                var index = Integer.parseInt(matcher.group("index"));
+                var index = Integer.parseInt(matcher.group(INDEX_GROUP));
                 node = index < array.size() ? array.get(index) : null;
             }
         }
@@ -176,7 +179,7 @@ public record JsonTemplate(ObjectNode base, Class<?> type) {
     private static ObjectNode descend(ObjectNode parent, String segment) {
         var matcher = match(segment);
         var name = matcher.group("name");
-        if (matcher.group("index") == null) {
+        if (matcher.group(INDEX_GROUP) == null) {
             if (parent.get(name) instanceof ObjectNode child) {
                 return child;
             }
@@ -185,7 +188,7 @@ public record JsonTemplate(ObjectNode base, Class<?> type) {
             return created;
         }
         var array = arrayChild(parent, name);
-        var index = Integer.parseInt(matcher.group("index"));
+        var index = Integer.parseInt(matcher.group(INDEX_GROUP));
         if (element(array, index) instanceof ObjectNode child) {
             return child;
         }
@@ -198,10 +201,10 @@ public record JsonTemplate(ObjectNode base, Class<?> type) {
     private static void assign(ObjectNode parent, String segment, JsonNode value) {
         var matcher = match(segment);
         var name = matcher.group("name");
-        if (matcher.group("index") == null) {
+        if (matcher.group(INDEX_GROUP) == null) {
             parent.set(name, value);
         } else {
-            setElement(arrayChild(parent, name), Integer.parseInt(matcher.group("index")), value);
+            setElement(arrayChild(parent, name), Integer.parseInt(matcher.group(INDEX_GROUP)), value);
         }
     }
 

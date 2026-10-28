@@ -3,8 +3,6 @@ package io.github.dominys.cujex.steps;
 import io.github.dominys.cujex.context.ScenarioContext;
 import io.github.dominys.cujex.context.ScenarioContextStore;
 
-import org.springframework.beans.factory.annotation.Autowired;
-
 import static io.github.dominys.cujex.cucumber.CucConstants.EMPTY_PLACEHOLDER;
 import static io.github.dominys.cujex.cucumber.CucConstants.NULL_PLACEHOLDER;
 
@@ -19,11 +17,14 @@ import static io.github.dominys.cujex.cucumber.CucConstants.NULL_PLACEHOLDER;
  */
 public abstract class BaseSteps {
 
-    @Autowired
-    private ScenarioContext scenarioContext;
+    private final ScenarioContext scenarioContext;
 
-    @Autowired
-    private ScenarioContextStore scenarioStore;
+    private final ScenarioContextStore scenarioStore;
+
+    protected BaseSteps(ScenarioContext scenarioContext, ScenarioContextStore scenarioStore) {
+        this.scenarioContext = scenarioContext;
+        this.scenarioStore = scenarioStore;
+    }
 
     protected ScenarioContext scenarioContext() {
         return scenarioContext;

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.dominys</groupId>
+        <artifactId>it-tests-example</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <groupId>io.github.dominys</groupId>
+    <artifactId>cujex-kafka</artifactId>
+
+    <name>cujex-kafka</name>
+    <description>
+        Optional Cujex extension that adds Kafka support to a Cucumber + JEXL
+        suite: a suite-lifetime consumer per topic that fans incoming records out
+        to all active scenarios, a Kafka Admin based consumer-group readiness wait,
+        a per-scenario (glue-scoped) inbox that filters and awaits messages with
+        Awaitility, and a simple producer. Opt-in via @Import(CujexKafkaConfig) so
+        cujex-core stays completely Kafka-free for suites that do not need it.
+    </description>
+
+    <!-- Compile-scope, like cujex-core: this is a library whose API (the Kafka
+         client, Awaitility, Spring) must reach the consuming suite transitively. -->
+    <dependencies>
+        <!-- The framework this extends. Pulling in cujex-kafka transitively
+             provides cujex-core (and its Cucumber/Spring/Jackson stack) too. -->
+        <dependency>
+            <groupId>io.github.dominys</groupId>
+            <artifactId>cujex-core</artifactId>
+        </dependency>
+
+        <!-- Kafka client: consumers, producer and AdminClient. Version managed by
+             the spring-boot-dependencies BOM imported in the parent. -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+        </dependency>
+
+        <!-- Awaitility: scenarios poll their inbox until the expected message
+             arrives. Version managed by the spring-boot-dependencies BOM. -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+        </dependency>
+
+        <!-- Spring context: the opt-in @Bean config and the glue-scoped inbox. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <!-- Lombok: compile-time only (@RequiredArgsConstructor); not part of the
+             published API, so provided scope keeps it off consumers' classpath. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -2,6 +2,8 @@ package org.dominys.ittests.steps;
 
 import io.github.dominys.cujex.cucumber.BaseCucRecord;
 import io.github.dominys.cujex.cucumber.EditFieldsRecord;
+import io.github.dominys.cujex.context.ScenarioContext;
+import io.github.dominys.cujex.context.ScenarioContextStore;
 import io.github.dominys.cujex.steps.BaseSteps;
 
 import io.cucumber.java.en.Given;
@@ -10,7 +12,6 @@ import io.cucumber.java.en.When;
 import org.dominys.ittests.api.client.OrderApi;
 import org.dominys.ittests.api.model.Customer;
 import org.dominys.ittests.api.model.Order;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
@@ -35,8 +36,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class OrderSteps extends BaseSteps {
 
-    @Autowired
-    private OrderApi orderApi;
+    private final OrderApi orderApi;
+
+    public OrderSteps(ScenarioContext scenarioContext, ScenarioContextStore scenarioStore, OrderApi orderApi) {
+        super(scenarioContext, scenarioStore);
+        this.orderApi = orderApi;
+    }
 
     // --- prepare -----------------------------------------------------------
 

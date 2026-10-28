@@ -20,6 +20,11 @@
              independent of the order-service example below. -->
         <module>cujex-core</module>
 
+        <!-- Optional Cujex extension: Kafka testing support (one consumer per
+             topic, consumer-group readiness waits, per-scenario message filtering).
+             Depends on cujex-core; a suite only pulls it in if it tests messaging. -->
+        <module>cujex-kafka</module>
+
         <!-- Runnable examples that consume cujex-core: a deployable order-service
              plus the e2e tests that exercise it. Grouped under their own aggregator. -->
         <module>examples</module>
@@ -52,6 +57,11 @@
             <dependency>
                 <groupId>io.github.dominys</groupId>
                 <artifactId>cujex-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.dominys</groupId>
+                <artifactId>cujex-kafka</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

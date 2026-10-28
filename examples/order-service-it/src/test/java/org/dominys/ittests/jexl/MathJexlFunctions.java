@@ -18,7 +18,7 @@ public class MathJexlFunctions implements CujexJexlFunctions {
 
     @Override
     public String namespace() {
-        return "math"; // callable as ${math:...}
+        return "math";
     }
 
     @Override

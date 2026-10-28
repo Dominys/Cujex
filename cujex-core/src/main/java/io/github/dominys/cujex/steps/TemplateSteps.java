@@ -2,6 +2,8 @@ package io.github.dominys.cujex.steps;
 
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Given;
+import io.github.dominys.cujex.context.ScenarioContext;
+import io.github.dominys.cujex.context.ScenarioContextStore;
 import io.github.dominys.cujex.template.JsonStubRef;
 import io.github.dominys.cujex.template.JsonTemplate;
 
@@ -34,6 +36,10 @@ import static io.github.dominys.cujex.cucumber.CucConstants.CUC_REF_ID_FIELD;
  * </pre>
  */
 public class TemplateSteps extends BaseSteps {
+
+    public TemplateSteps(ScenarioContext scenarioContext, ScenarioContextStore scenarioStore) {
+        super(scenarioContext, scenarioStore);
+    }
 
     /**
      * Loads one or more self-describing stub files and stores each as a reusable
@@ -143,48 +149,65 @@ public class TemplateSteps extends BaseSteps {
                           Map<String, String> scopeByColumn) {
         String scope = null;
         for (var i = 0; i < headers.size(); i++) {
-            var header = headers.get(i);
             var cell = i < cells.size() ? cells.get(i) : null;
-            if (CUC_REF_ID_FIELD.equals(header)) {
-                continue;
-            }
-            if (header.endsWith("[]")) {
-                var name = header.substring(0, header.length() - 2);
-                if (isBlank(cell)) {
-                    scope = scopeByColumn.get(header);
-                } else {
-                    String collection;
-                    if (name.startsWith(".")) {
-                        if (scope == null) {
-                            throw new IllegalStateException(
-                                    "Relative collection '%s' has no open scope - precede it with a '...[]' opener"
-                                            .formatted(header));
-                        }
-                        collection = scope + name;
-                    } else {
-                        collection = name;
-                    }
-                    scope = resolveCollectionScope(template, collection, stripBrackets(cell), overrides, appendCursor);
-                    scopeByColumn.put(header, scope);
-                }
-            } else if (header.endsWith(":")) {
-                scope = header.substring(0, header.length() - 1);
-            } else if (header.startsWith(".")) {
-                if (!isBlank(cell)) {
-                    if (scope == null) {
-                        throw new IllegalStateException(
-                                "Relative column '%s' has no open scope - precede it with a '...:' or '...[]' opener"
-                                        .formatted(header));
-                    }
-                    overrides.put(scope + header, resolveCell(cell));
-                }
-            } else {
-                scope = null;
-                if (!isBlank(cell)) {
-                    overrides.put(header, resolveCell(cell));
-                }
-            }
+            scope = applyCell(template, headers.get(i), cell, scope, overrides, appendCursor, scopeByColumn);
         }
+    }
+
+    /**
+     * Applies a single header/cell pair, returning the active scope after it: object
+     * and collection openers return the scope they open, a relative or root value
+     * override leaves (object) or clears (root) the scope accordingly.
+     */
+    private String applyCell(JsonTemplate template, String header, String cell, String scope,
+                             Map<String, Object> overrides, Map<String, Integer> appendCursor,
+                             Map<String, String> scopeByColumn) {
+        if (CUC_REF_ID_FIELD.equals(header)) {
+            return scope;
+        }
+        if (header.endsWith("[]")) {
+            return applyCollectionHeader(template, header, cell, scope, overrides, appendCursor, scopeByColumn);
+        }
+        if (header.endsWith(":")) {
+            return header.substring(0, header.length() - 1);
+        }
+        if (header.startsWith(".")) {
+            if (!isBlank(cell)) {
+                overrides.put(requireScope(scope, header) + header, resolveCell(cell));
+            }
+            return scope;
+        }
+        if (!isBlank(cell)) {
+            overrides.put(header, resolveCell(cell));
+        }
+        return null;
+    }
+
+    /**
+     * Opens (or re-enters) a collection scope for an {@code x[]} / {@code .child[]}
+     * header: a blank cell continues the element this column resolved on an earlier
+     * row, otherwise the cell selector resolves (or appends) a fresh element.
+     */
+    private String applyCollectionHeader(JsonTemplate template, String header, String cell, String scope,
+                                         Map<String, Object> overrides, Map<String, Integer> appendCursor,
+                                         Map<String, String> scopeByColumn) {
+        if (isBlank(cell)) {
+            return scopeByColumn.get(header);
+        }
+        var name = header.substring(0, header.length() - 2);
+        var collection = name.startsWith(".") ? requireScope(scope, header) + name : name;
+        var resolved = resolveCollectionScope(template, collection, stripBrackets(cell), overrides, appendCursor);
+        scopeByColumn.put(header, resolved);
+        return resolved;
+    }
+
+    private static String requireScope(String scope, String header) {
+        if (scope == null) {
+            throw new IllegalStateException(
+                    "Relative column '%s' has no open scope - precede it with a '...:' or '...[]' opener"
+                            .formatted(header));
+        }
+        return scope;
     }
 
     /**
@@ -205,9 +228,10 @@ public class TemplateSteps extends BaseSteps {
             if (index >= next) {
                 appendCursor.put(collection, index + 1);
             }
-        } else if (selector.indexOf('=') > 0) {
-            var field = selector.substring(0, selector.indexOf('='));
-            var value = selector.substring(selector.indexOf('=') + 1);
+        } else if (selector.contains("=") && !selector.startsWith("=")) {
+            var eq = selector.indexOf('=');
+            var field = selector.substring(0, eq);
+            var value = selector.substring(eq + 1);
             var found = template.matchIndex(collection, field, value);
             if (found >= 0) {
                 index = found;

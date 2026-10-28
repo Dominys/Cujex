@@ -32,6 +32,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Kafka producer/consumer support: publishes order events and consumes
+             status-update commands. The starter pulls in spring-kafka together with
+             Spring Boot's Kafka auto-configuration (a separate module in Boot 4). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>

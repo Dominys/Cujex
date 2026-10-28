@@ -2,6 +2,8 @@ package io.github.dominys.cujex.steps;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.cucumber.java.en.Then;
+import io.github.dominys.cujex.context.ScenarioContext;
+import io.github.dominys.cujex.context.ScenarioContextStore;
 
 import java.util.List;
 
@@ -17,7 +19,12 @@ import static io.github.dominys.cujex.cucumber.ParameterTypes.convertValue;
  * the step. That keeps the result type flexible (collection, object, ...) instead
  * of forcing it through a fixed {@code @ParameterType} return type.
  */
+@SuppressWarnings("java:S5960") // assertion steps are this library's purpose, shipped in main for reuse
 public class GeneralValidationSteps extends BaseSteps {
+
+    public GeneralValidationSteps(ScenarioContext scenarioContext, ScenarioContextStore scenarioStore) {
+        super(scenarioContext, scenarioStore);
+    }
 
     /**
      * Asserts that two collections (each referenced via {@code ${...}}) contain the

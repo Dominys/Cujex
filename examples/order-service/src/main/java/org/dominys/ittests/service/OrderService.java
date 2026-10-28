@@ -1,5 +1,6 @@
 package org.dominys.ittests.service;
 
+import lombok.RequiredArgsConstructor;
 import org.dominys.ittests.api.model.Order;
 import org.dominys.ittests.api.model.OrderStatus;
 import org.springframework.stereotype.Service;
@@ -26,9 +27,11 @@ import static java.util.Objects.requireNonNullElseGet;
  * scenario context.
  */
 @Service
+@RequiredArgsConstructor
 public class OrderService {
 
     private final Map<String, Order> storage = new ConcurrentHashMap<>();
+    private final OrderEventPublisher eventPublisher;
 
     /**
      * "Creates" an order: assigns a server-side id, stamps {@code createdAt},
@@ -44,6 +47,7 @@ public class OrderService {
                 .createdAt(requireNonNullElseGet(order.createdAt(), Instant::now))
                 .build();
         storage.put(id, stored);
+        eventPublisher.publishOrderCreated(stored);
         return stored;
     }
 
@@ -58,6 +62,7 @@ public class OrderService {
     public Order updateStatus(String id, OrderStatus status) {
         var updated = get(id).toBuilder().status(status).build();
         storage.put(id, updated);
+        eventPublisher.publishOrderStatusUpdated(updated);
         return updated;
     }
 
