@@ -30,6 +30,11 @@
         <!-- Runnable examples that consume cujex-core: a deployable order-service
              plus the e2e tests that exercise it. Grouped under their own aggregator. -->
         <module>examples</module>
+
+        <!-- Reporting-only: rolls cujex-core/kafka unit coverage together with the
+             coverage their classes get from the example e2e runs, into one Sonar
+             report. Last so all measured modules are built first. -->
+        <module>cujex-coverage</module>
     </modules>
 
     <properties>
@@ -52,6 +57,16 @@
         <failsafe.version>3.6.1</failsafe.version>
         <compiler.plugin.version>3.16.0</compiler.plugin.version>
         <jacoco.version>0.8.13</jacoco.version>
+
+        <!-- Sonar: the example modules are sample consumers, not part of the
+             published product, so they are kept out of both analysis and coverage.
+             Coverage is read from the cross-module aggregate (see cujex-coverage),
+             which combines unit tests and the e2e feature runs for core + kafka. -->
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${maven.multiModuleProjectDirectory}/cujex-coverage/target/site/jacoco-aggregate/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.exclusions>**/examples/**</sonar.exclusions>
+        <sonar.coverage.exclusions>**/examples/**</sonar.coverage.exclusions>
     </properties>
 
     <dependencyManagement>

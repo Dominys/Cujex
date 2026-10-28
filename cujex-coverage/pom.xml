@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.dominys</groupId>
+        <artifactId>cujex-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>cujex-coverage</artifactId>
+
+    <name>Cujex Coverage Aggregate</name>
+    <description>
+        Reporting-only module. It merges the JaCoCo execution data of the published
+        library modules (cujex-core, cujex-kafka) - both their own unit tests and the
+        end-to-end feature runs in order-service-it that exercise them - into a single
+        aggregated report for Sonar. Only cujex-core and cujex-kafka classes are
+        reported; the example application is deliberately not a dependency here, so it
+        never appears in (and cannot drag down) the coverage metric. Produces no
+        publishable artifact.
+    </description>
+
+    <properties>
+        <maven.install.skip>true</maven.install.skip>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <!-- Reported bundles: the published library classes we want measured. -->
+        <dependency>
+            <groupId>io.github.dominys</groupId>
+            <artifactId>cujex-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.dominys</groupId>
+            <artifactId>cujex-kafka</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Exec-data source only: the e2e suite runs under a JaCoCo agent and records
+             which cujex-core/kafka lines the features hit. It has no main code of its
+             own, so it contributes coverage without adding reported classes. -->
+        <dependency>
+            <groupId>io.github.dominys</groupId>
+            <artifactId>order-service-it</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <!-- This module has no code of its own: disable the inherited
+                         per-module agent and report, keep only the cross-module roll-up. -->
+                    <execution>
+                        <id>jacoco-prepare-agent</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>jacoco-report</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>jacoco-aggregate</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report-aggregate</goal>
+                        </goals>
+                        <configuration>
+                            <title>Cujex (core + kafka)</title>
+                            <!-- Safety net: never report example packages even if one
+                                 were ever pulled onto this module's classpath. -->
+                            <excludes>
+                                <exclude>**/examples/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

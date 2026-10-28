@@ -132,6 +132,22 @@
 
     <build>
         <plugins>
+            <!-- JaCoCo agent only. prepare-agent sets the argLine that failsafe's
+                 forked JVM uses, so the e2e feature runs record which cujex-core/kafka
+                 lines they hit (into target/jacoco.exec). This module has no main code
+                 of its own, so the inherited per-module report is switched off; the
+                 exec data is consumed by cujex-coverage's aggregate report instead. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>jacoco-report</id>
+                        <phase>none</phase>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- The Cucumber suite is an integration test: it needs the service jar
                  and a Docker image, so it runs in the verify phase via failsafe,
                  not in unit-test (surefire) territory. -->
