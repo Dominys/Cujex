@@ -1,6 +1,6 @@
 {
   "@descriptor": {
-    "type": "org.dominys.ittests.api.model.Order"
+    "type": "io.github.dominys.cujex.examples.api.model.Order"
   },
   "price": 9.99,
   "status": "NEW",

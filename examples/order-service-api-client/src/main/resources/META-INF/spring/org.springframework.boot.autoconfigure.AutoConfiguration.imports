@@ -1,1 +1,1 @@
-org.dominys.ittests.api.client.OrderServiceClientAutoConfiguration
+io.github.dominys.cujex.examples.api.client.OrderServiceClientAutoConfiguration

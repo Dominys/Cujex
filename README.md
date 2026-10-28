@@ -1,46 +1,94 @@
-# it-tests-example — powered by Cujex
+# Cujex
 
-A small, self-contained example of how to write **e2e / service-level tests** with
-**Cucumber** and a **JEXL** preprocessing layer. The infrastructure here is extracted
-and decoupled from a real project (`banner-service-integration-tests`) so it can serve
-as documented, runnable reference material.
+**Cujex** (**Cu**cumber + **Jex**l) is a small, reusable framework for writing
+**e2e / service-level tests** with Cucumber. It adds a JEXL expression layer, a
+per-scenario memory store, and a JSON-template engine on top of plain Cucumber, so
+your feature files can build, reference, and validate real domain objects inline —
+without a pile of bespoke glue code in every suite.
 
-> **Cujex** (**Cu**cumber + **Jex**l) is the name of the reusable test infrastructure
-> showcased in this repo — the scenario context store, the JEXL preprocessing layer, the
-> JSON-template engine, and the decomposition DSL for building and validating models from
-> tables. This repository is a runnable *example* of using Cujex to test a sample
-> `order-service`.
+It is domain-agnostic: the core library knows nothing about any particular service.
+You depend on it at test scope, import one Spring config, add its glue package to your
+Cucumber glue path, and contribute only your own domain steps. A runnable
+[`order-service` example](examples/README.md) in this repo shows the whole thing
+end to end, including the optional Kafka extension.
 
-Unlike a classic unit test, the test module here **cannot see the service classes at
-all**. The service runs as a **Spring Boot web app inside a Docker container**
-(started automatically with Testcontainers) and the tests talk to it only over
-**REST** through a shared API artifact. That is what makes these true black-box,
-over-the-wire service tests.
+## Why Cujex
 
-The two patterns it is built to teach:
+Four patterns make up the framework — each is documented in depth under
+[`cujex-core`](cujex-core/README.md):
 
-1. **Scenario context storage** – steps store their results in a per-scenario
-   key/value store and reference them later.
-2. **JEXL preprocessing** – every feature-file value shaped like `${ ... }` is
-   evaluated as an expression *before* it reaches your step code.
+1. **[Scenario context storage](cujex-core/docs/scenario-context.md)** — per-scenario
+   key/value memory. Steps store their results by key and reference them later, from
+   Java or straight from the feature file.
+2. **[JEXL preprocessing](cujex-core/docs/jexl-preprocessing.md)** — every feature-file
+   value shaped like `${ ... }` is evaluated as a JEXL expression *before* it reaches
+   your step code, so `${created.id()}` navigates a previously stored entity inline.
+3. **[JSON templates](cujex-core/docs/json-templates.md)** — load a shared request/response
+   stub and override only the fields a scenario actually exercises, with a decomposition
+   DSL for nested collections and a matching table-driven validation step.
+4. **Asynchronous messaging** — the opt-in [`cujex-kafka`](cujex-kafka/README.md) extension
+   adds parallel-safe produce/consume round-trips over Kafka.
 
-It also demonstrates a third, closely related pattern:
+Here is what that buys you in a feature file — stored entities, inline JEXL, and
+generic steps, with no order-specific plumbing:
 
-3. **JSON templates** – load a common request/response stub and override only the
-   fields a scenario actually exercises (see *Core concept 3* below).
+```gherkin
+Scenario: Creating an order publishes an ORDER_CREATED event
+  Given I prepare orders:
+    | cucId  | price | status |
+    | order1 | 150.0 | NEW    |
+  When I create order ${order1} and store result in created
+  Then I await an order event matching and store result in event:
+    | type          | orderId         | status |
+    | ORDER_CREATED | ${created.id()} | NEW    |
+  And I expect that ${event.price()} equals ${150.0}
+```
 
----
+## Add Cujex to your suite
 
-## Architecture
+1. **Depend** on the core at test scope (currently `1.0-SNAPSHOT`, build from source —
+   see [Building](#building)):
+   ```xml
+   <dependency>
+       <groupId>io.github.dominys</groupId>
+       <artifactId>cujex-core</artifactId>
+       <scope>test</scope>
+   </dependency>
+   ```
+2. **Import** the Spring config from your `@CucumberContextConfiguration` context:
+   ```java
+   @Import(CujexCoreConfig.class)
+   ```
+3. **Add both glue packages** to the Cucumber glue path — your own plus the framework's:
+   ```java
+   @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.acme.it, io.github.dominys.cujex")
+   ```
 
-The reactor has three top-level modules: **`cujex-core`** (the published library),
-**`cujex-kafka`** (an opt-in messaging extension), and **`examples`** — an aggregator
-that groups the order-service modules demonstrating them. The arrows below show the
-**only** compile dependencies — note the test module depends on the API contract and
-the reusable framework, never on the service:
+No Spring Boot is required; a plain Spring `@Configuration` + `@ContextConfiguration`
+keeps the test context light. The full recipe — registering domain types, adding steps,
+contributing JEXL functions, wiring Kafka — lives in
+[Extending Cujex](cujex-core/docs/extending.md).
+
+## Modules
+
+The reactor has two library modules plus a runnable example aggregator:
+
+| Module | Packaging | Role |
+|--------|-----------|------|
+| [`cujex-core`](cujex-core/README.md) | jar | **The framework.** Domain-agnostic Cucumber + JEXL infrastructure (`io.github.dominys.cujex`): scenario context storage, per-cell JEXL preprocessing, typed data-table mapping, the JSON template engine, and the generic creation/validation steps. Any suite can depend on it. |
+| [`cujex-kafka`](cujex-kafka/README.md) | jar | **Opt-in Kafka extension** (`io.github.dominys.cujex.kafka`): one long-lived consumer per topic, a fan-out bus, per-scenario filtering inboxes for parallel safety, a consumer-group-readiness wait, and a producer. Payload-agnostic (raw `byte[]`). Activated only by explicit `@Import`. |
+| [`examples`](examples/README.md) | pom | **Demonstration only.** Aggregator for the runnable `order-service-*` project that drives a sample service over REST and Kafka using Cujex. Not part of the published library. |
+
+## See it in action
+
+The [`examples/`](examples/README.md) tree is a complete, runnable suite that uses Cujex
+to test a sample `order-service` as a true **black box**: the service runs as a Spring
+Boot app inside a Docker container (started automatically by Testcontainers) and the test
+module talks to it only over **REST** and **Kafka** through a shared API artifact — it
+never has the service classes on its classpath.
 
 ```
-  ┌────────────────────────┐          ┌────────────────────────────────────────┐
+  ┌─────────────────────────┐          ┌────────────────────────────────────────┐
   │      cujex-core         │          │        order-service-api-model         │
   │ reusable Cucumber+JEXL  │          │        pure records, no Spring         │
   │ framework (io.github.   │          │              (api.model)               │
@@ -62,811 +110,39 @@ the reusable framework, never on the service:
                                                              └──────────────────────────────────┘
 ```
 
-| Module | Packaging | Role |
-|--------|-----------|------|
-| `cujex-core` | jar | **Cujex** — the reusable, domain-agnostic Cucumber + JEXL framework (`io.github.dominys.cujex`): scenario context storage, per-cell JEXL preprocessing, typed data-table mapping, the JSON template engine, and the generic creation/validation steps. Knows nothing about orders; any suite can depend on it. |
-| `cujex-kafka` | jar | **Opt-in Kafka extension** (`io.github.dominys.cujex.kafka`), a sibling of core (not part of it): one long-lived consumer per topic, a fan-out bus, per-scenario filtering inboxes for parallel safety, a consumer-group-readiness wait (Kafka Admin), and a producer. Activated only by explicit `@Import`. |
-| `order-service-api-model` | jar | Pure API model records (`api.model`) — Jackson + Lombok, **no Spring**. Any client, Spring or not, can reuse the exact wire model. Also holds the Kafka wire types and topic names. |
-| `order-service-api-client` | jar | The **declarative HTTP client** (`api.client`): the `@HttpExchange` `OrderApi`, a factory, and **Spring Boot auto-configuration**. Depends on the model module. The only production artifact the tests depend on. |
-| `order-service` | jar (Boot) | A tiny Spring Boot web app exposing `/orders`. **Publishes** order events and **consumes** status-update commands over Kafka. Packaged into a Docker image. Depends on `order-service-api-model`. |
-| `order-service-it` | jar | The **example** Cucumber + JEXL test suite. Depends on `cujex-core`, `cujex-kafka` and `order-service-api-client` at **test scope** only, adds its own order-specific glue (`OrderSteps`, `OrderKafkaSteps`, `OrderTypes`), starts the service + Kafka containers and drives them over REST and Kafka. |
-
-Because `order-service-it` never has `order-service` on its classpath, the compiler
-physically prevents a test from reaching into service internals — the only way to
-interact with the service is through the REST client.
-
----
-
-## Quick start
+Run the whole example — build every module, package the service into a Docker image,
+start it in a container, and run the feature files through the glue in
+`io.github.dominys.cujex.examples`:
 
 ```bash
 ./mvnw verify
 ```
 
-This builds all five modules, packages the service into a Docker image, starts it
-in a container, and runs the five feature files through the glue in
-`org.dominys.ittests`. An HTML report is written to
-`order-service-it/target/cucumber.html`.
+An HTML report is written to `examples/order-service-it/target/cucumber.html`. The
+example's modules, feature files, and Docker/Rancher/IDE setup notes are documented in
+[examples/README.md](examples/README.md).
 
-**Requirements:**
-
-- JDK 21 (Maven is provided via the wrapper `./mvnw`).
-- A running **Docker** daemon (the suite uses Testcontainers).
-
-### Docker on Rancher Desktop / Colima
-
-With Docker Desktop no extra configuration is needed. If you use **Rancher Desktop**
-or **Colima**, Testcontainers may not auto-detect the socket; export these first:
+## Building
 
 ```bash
-export DOCKER_HOST="unix://$HOME/.rd/docker.sock"          # Colima: unix://$HOME/.colima/default/docker.sock
-export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
-export TESTCONTAINERS_RYUK_DISABLED=true
+./mvnw -DskipTests install   # build + install the library jars locally
+./mvnw verify                # also run the example suite (needs Docker)
 ```
 
-### Running from IntelliJ IDEA (macOS + Rancher Desktop / Colima)
-
-IDEA launches tests with its own environment, not your shell's, so the same socket
-problem shows up as:
-
-```
-Could not find a valid Docker environment. Please see logs and check configuration
-```
-
-These are **environment variables**, not JVM `-D` arguments. Add them to the run
-configuration (**Run → Edit Configurations… → your JUnit/Cucumber config →
-Environment variables**), one per row:
-
-| Name | Value (Rancher Desktop) | Value (Colima) |
-|------|-------------------------|----------------|
-| `DOCKER_HOST` | `unix:///Users/<you>/.rd/docker.sock` | `unix:///Users/<you>/.colima/default/docker.sock` |
-| `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` | `/var/run/docker.sock` | `/var/run/docker.sock` |
-| `TESTCONTAINERS_RYUK_DISABLED` | `true` | `true` |
-
-- `DOCKER_HOST` points Testcontainers at the real socket; `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`
-  is the path mounted **into** containers (Ryuk, the client); disabling Ryuk avoids its
-  own socket probing.
-- To avoid retyping, edit the **template** (the greyed-out *JUnit* / *Cucumber Java*
-  entry under *Edit Configurations…*) so every new run inherits these values.
-- Alternatively, launch IDEA from a terminal that already `export`ed the variables above
-  (e.g. `open -a "IntelliJ IDEA"` from that shell) and it will inherit them.
-
-### Run against an already-running service
-
-To skip the container and point the suite at any running instance:
-
-```bash
-./mvnw -pl examples/order-service-it verify -Dservice.baseUrl=http://localhost:8080
-```
-
-See `harness/ServiceUnderTest.java` — `-Dservice.baseUrl` short-circuits the container.
-
----
-
-## Project layout
-
-```
-pom.xml                                        # parent reactor: 3 modules (cujex-core + cujex-kafka + examples), BOMs, plugin mgmt
-
-cujex-core/                                    # Cujex: the reusable framework (io.github.dominys) — the PRODUCT
-  src/main/java/io/github/dominys/cujex/
-    CujexCoreConfig.java                        # @Configuration @ComponentScan — the one @Import a suite needs
-    context/                                    # concept #1: scenario context storage
-      ScenarioContextStore.java                 #   per-scenario key/value store
-      ScenarioContext.java                      #   JEXL engine: ${...} resolution + editing
-      StepVariables.java                        #   data-table type for "define variables"
-    jexl/                                       # concept #2: JEXL preprocessing
-      CucJexlFunctions.java                     #   custom JEXL functions (now(), uuid(), ...)
-    cucumber/                                   # generic Cucumber parameter/data-table plumbing
-      ParameterTypes.java                       #   ObjectMapper + reusable resolveRow/toRecord helpers
-      BaseCucRecord.java, EditFieldsRecord.java #   table-row <-> record mapping
-      CucConstants.java, CucIdsToListDeserializer.java
-    template/                                   # concept #3: JSON request/response stubs
-      JsonTemplate.java                         #   self-loading stub (reads @descriptor) + overrides
-      JsonStubRef.java                          #   row record for the "load JSON stubs" table
-    steps/                                      # domain-agnostic steps
-      BaseSteps.java                            #   access to context + store (extension base)
-      InfraSteps.java                           #   "I define scenario variables:"
-      GeneralValidationSteps.java               #   generic assertions
-      ModelValidationSteps.java                 #   "I expect models match:" table assertions
-      TemplateSteps.java                        #   "load JSON stubs" / "create models from template"
-
-cujex-kafka/                                   # Cujex Kafka extension — OPT-IN sibling of core, NOT part of it
-  src/main/java/io/github/dominys/cujex/kafka/
-    CujexKafkaConfig.java                       # lite @Bean config (no stereotype) — activated via explicit @Import
-    CujexKafkaSettings.java                     # record: bootstrap servers, topics to consume, consumer groups to await
-    KafkaConsumerGroupWaiter.java               # Kafka Admin + Awaitility: wait until groups STABLE with partitions
-    KafkaConsumerManager.java                   # suite lifecycle: start one consumer per topic, await groups, close
-    KafkaTopicConsumer.java                     # one long-lived consumer per topic for the whole run
-    KafkaMessageBus.java                        # fan-out: delivers each incoming message to all active scenario inboxes
-    KafkaMessage.java                           # record wrapping topic + raw byte[] key/value/headers (+ String & PayloadDecoder accessors)
-    ScenarioKafkaInbox.java                     # @Scope("cucumber-glue") per-scenario mailbox; Awaitility awaitMessage
-    KafkaProducerSupport.java                   # byte[] producer with String/byte[] overloads (acks=all, flush)
-    PayloadDecoder.java                         # opt-in byte[] -> T decoder (utf8 built-in); plug in Protobuf/Avro/JSON
-
-examples/                                      # aggregator (pom) — runnable examples, NOT published
-  pom.xml                                       #   groups the order-service-* modules below
-  order-service-api-model/
-    src/main/java/org/dominys/ittests/api/
-      model/   Order.java, Customer.java, OrderStatus.java
-                                               #   records + Lombok @Builder/@Jacksonized, no Spring
-               OrderEvent.java, OrderEventType.java, StatusUpdateCommand.java, OrderTopics.java
-                                               #   Kafka wire types (notification events, status command, topic names)
-  order-service-api-client/
-    src/main/java/org/dominys/ittests/api/
-      client/  OrderApi.java                    #   @HttpExchange declarative REST interface
-               OrderServiceClient.java          #   builds the client proxy from a base URL
-               OrderServiceClientProperties.java #   @ConfigurationProperties("order-service")
-               OrderServiceClientAutoConfiguration.java  # @AutoConfiguration exposing OrderApi
-    src/main/resources/META-INF/spring/
-      ...AutoConfiguration.imports             #   registers the auto-configuration
-  order-service/
-    Dockerfile                                 #   eclipse-temurin:21-jre, COPY target/*.jar
-    src/main/java/org/dominys/ittests/service/
-      Application.java                          #   @SpringBootApplication
-      OrderController.java                      #   @RestController mirroring OrderApi
-      OrderService.java                          #   in-memory store (the SUT logic); publishes events on create/update
-      KafkaConfig.java                           #   NewTopic beans for the notification + status topics
-      OrderEventPublisher.java                   #   sends ORDER_CREATED / ORDER_STATUS_UPDATED notifications
-      OrderStatusListener.java                   #   @KafkaListener consuming StatusUpdateCommand
-  order-service-it/                            # the EXAMPLE suite consuming cujex-core
-    src/test/java/org/dominys/ittests/
-      RunCucumberIT.java                        #   JUnit Platform suite; glue = example + cujex packages
-      harness/                                  #   boots the SUT + Spring wiring
-        ServiceUnderTest.java                   #     resolves base URL (container or override); joins Kafka network
-        KafkaUnderTest.java                     #     starts the broker (Testcontainers) before the service
-        TestConfig.java                         #     @Import(CujexCoreConfig, CujexKafkaConfig) + OrderApi + CujexKafkaSettings
-        CucumberSpringConfiguration.java        #     @CucumberContextConfiguration + reset hook
-      cucumber/
-        OrderTypes.java                         #   EXTENSION POINT: order/customer @ParameterType + @DataTableType
-      steps/
-        OrderSteps.java                         #   domain steps driving the REST client (extends BaseSteps)
-        OrderKafkaSteps.java                     #   Kafka steps: send status command, await & store an order event
-    src/test/resources/features/
-      01_context_storage.feature                #   store / reference / read-back loop
-      02_jexl_preprocessing.feature             #   functions, literals, nested navigation
-      03_field_editing.feature                  #   edit selected fields of a stored entity
-      04_end_to_end.feature                     #   capstone tying it all together
-      05_json_templates.feature                 #   load a stub, override only relevant fields
-      06_custom_jexl_functions.feature           #   custom functions + namespace registration
-      07_kafka_messaging.feature                 #   produce/consume round-trips over Kafka
-    src/test/resources/stubs/
-      order_request.json                        #   shared "success request" stub
-```
-
----
-
-## How the test talks to the service
-
-### The declarative client (`order-service-api-client`)
-
-The client is an **HTTP interface**: `OrderApi` describes the REST contract with
-annotations, and Spring generates a proxy that performs the actual calls. No hand-written
-`RestClient` plumbing in the tests.
-
-```java
-@HttpExchange(url = "/orders", accept = "application/json", contentType = "application/json")
-public interface OrderApi {
-    @PostExchange                 Order create(@RequestBody Order order);
-    @GetExchange("/{id}")         Order get(@PathVariable("id") String id);
-    @PutExchange("/{id}/status")  Order updateStatus(@PathVariable("id") String id,
-                                                     @RequestParam("status") OrderStatus status);
-    @GetExchange                  List<Order> getAll();
-    @DeleteExchange               void deleteAll();
-}
-```
-
-`OrderServiceClient.create(baseUrl)` wires `RestClient` → `RestClientAdapter` →
-`HttpServiceProxyFactory` and returns a ready `OrderApi`.
-
-> **Tip:** always give `@PathVariable`/`@RequestParam` an explicit name. Parameter
-> names are not retained in bytecode unless compiled with `-parameters`, and the client
-> module is consumed as a plain jar — explicit names keep the client robust.
-
-### Spring Boot auto-configuration
-
-The client module also ships **Spring Boot auto-configuration**, built the way the
-Spring Boot docs recommend for a library: an `@AutoConfiguration` class registered in
-`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-(never component-scanned), guarded by conditions so it stays out of the way.
-
-A **Spring Boot** consumer then needs nothing but this jar on the classpath and one
-property — no client wiring code:
-
-```yaml
-order-service:
-  base-url: http://localhost:8080
-```
-
-`OrderServiceClientAutoConfiguration` reads `order-service.base-url`
-(`OrderServiceClientProperties`) and contributes an `OrderApi` bean. It is
-`@ConditionalOnProperty` (dormant until the base URL is set) and
-`@ConditionalOnMissingBean` (backs off if the application defines its own `OrderApi`).
-
-Those conditions are unit-tested with Spring Boot's `ApplicationContextRunner`
-(`OrderServiceClientAutoConfigurationTest`), which exercises each branch — property set
-→ bean present, property missing → dormant, user bean → backs off, and property binding —
-without starting a server or making any HTTP call.
-
-> This e2e suite uses a **plain** Spring context (`cucumber-spring`, no Boot), so it
-> wires the bean explicitly in `TestConfig` rather than through auto-configuration —
-> see below. The auto-configuration exists for real Spring Boot consumers of the client.
-
-### Starting the service (`ServiceUnderTest`)
-
-`ServiceUnderTest.baseUrl()` either returns the `-Dservice.baseUrl` override or lazily
-builds the image from `../order-service/Dockerfile` and starts **one** container for the
-whole suite, waiting on `/actuator/health` before handing back the mapped URL.
-
-`TestConfig` turns that URL into the `OrderApi` bean the steps autowire:
-
-```java
-@Bean
-OrderApi orderApi() {
-    return OrderServiceClient.create(ServiceUnderTest.baseUrl());
-}
-```
-
-Between scenarios, `CucumberSpringConfiguration`'s `@Before` hook calls
-`orderApi.deleteAll()` so each scenario starts from a clean service — state reset over
-the wire, no access to the service's memory.
-
----
-
-## Core concept 1 — the scenario context
-
-Two glue beans, both `@Scope("cucumber-glue")`, make up the per-scenario memory:
-
-| Bean | Responsibility |
-|------|----------------|
-| `ScenarioContextStore` | A `Map<String,Object>`. Steps `put`/`get` values by key. |
-| `ScenarioContext` | Wraps the store with a JEXL engine; `resolveField("${...}")` evaluates expressions against the store. |
-
-`cucumber-glue` scope means **cucumber-spring creates a fresh instance per scenario**,
-so stored data never leaks between scenarios — isolation with zero cleanup code.
-
-A typical step now drives the **REST client**, not a local service:
-
-```java
-@When("I create order {order} and store result in {word}")
-public void createOrder(Order order, String resultKey) {
-    Order created = orderApi.create(order);        // HTTP POST /orders
-    scenarioStore().put(resultKey, created);        // remember the response
-}
-```
-
-In the feature, the stored value is then addressable by its key:
-
-```gherkin
-When I create order ${order1} and store result in created
-Then I expect that order ${created} has id assigned
-When I read order with id ${created.id()} and store result in fetched
-Then I expect that ${fetched} equals ${created}
-```
-
----
-
-## Core concept 2 — JEXL preprocessing (`${ ... }`)
-
-Every data-table cell and inline `{param}` is passed through
-`ScenarioContext.resolveField` before your step runs:
-
-```
-cell: ${created.customer().country()}
-        │  matches ^\$\{(.+?)\}$ ?  yes
-        │  strip ${ }            ->  "created.customer().country()"
-        ▼
-   JEXL evaluates it against a MapContext backed by ScenarioContextStore.getAll()
-   → `created` is the stored object, `.customer().country()` are accessor calls
-```
-
-If a value is **not** wrapped in `${...}` it is left as a plain string (Jackson then
-maps it to the target field type). Supported expression kinds:
-
-| In a feature file | Resolves to |
-|-------------------|-------------|
-| `${order1}` | the entity stored under key `order1` |
-| `${created.id()}` | accessor navigation on a stored entity |
-| `${[`vip`,`priority`]}` | a JEXL array literal (backticks = JEXL strings) |
-| `${[1,2,3]}` | a numeric array |
-| `${now('-PT1H')}` | custom function call (see below) |
-| `` ${`PL`} `` | a literal string |
-
-### How a data-table row becomes a typed object
-
-```
-| cucId  | price |
-| order1 | 9.99  |
-```
-
-1. `ParameterTypes.mapFields` runs `resolveField` on **every cell**.
-2. `@JsonUnwrapped` in `BaseCucRecord<T>` splits `cucId` (the reference name) from the
-   payload columns.
-3. Jackson's `OBJECT_MAPPER` builds the payload record (`Order`) from the remaining
-   columns.
-4. A step stores the payload under its `cucId`, making it `${order1}`.
-
----
-
-## Core concept 3 — JSON templates (request/response stubs)
-
-Building a whole request model inline in every scenario makes scenarios huge and hides
-**which fields actually drive the flow under test**. Moving every model into its own
-resource file swings too far the other way — a sprawl of near-identical JSON. This
-example uses a **mixed approach**: keep a small set of common "stub" JSON files (e.g. a
-success request), load one, and override only the fields the scenario cares about.
-
-```gherkin
-@Templates
-Feature: Building request models from JSON templates
-
-  # Shared setup runs once, before every scenario.
-  Background:
-    Given I load JSON stubs:
-      | cucId     | file          |
-      | template1 | order_request |
-
-  Scenario: Override only the fields that matter
-    Given I create models from template template1:
-      | cucId  | items[0].sku | items[0].quantity |
-      | order1 | console      | 2                 |
-    When I create order ${order1} and store result in created
-    Then I expect that ${created.items().get(0).sku()} equals ${`console`}
-    And  I expect that order ${created} has status NEW   # inherited from the stub
-```
-
-Loading the stub is identical for every scenario, so it lives in a **`Background`**
-block — Gherkin's built-in "before each scenario" hook. The per-scenario
-`I create models from template ...` step is what varies, and that is all each scenario
-has to spell out.
-
-### How it works
-
-1. **Stubs are self-describing.** Each file under `src/test/resources/stubs` carries a
-   small `@descriptor` section naming the model type it builds, so there is no central
-   catalogue to maintain. Add a file, declare its type, and it is ready to load:
-
-   ```json
-   {
-     "@descriptor": { "type": "org.dominys.ittests.api.model.Order" },
-     "price": 9.99,
-     "items": [ { "sku": "widget", "quantity": 1, "price": 9.99 } ],
-     "customer": { "name": "Default Customer", "country": "US" }
-   }
-   ```
-   Because the type lives in the file, two stubs can target the **same** model
-   (`order_request.json`, `order_bulk_request.json`, ...) with zero extra wiring.
-
-2. **`I load JSON stubs:`** takes rows of `(cucId, file)`. `JsonTemplate.load(file)`
-   reads `/stubs/{file}.json`, pulls the type from `@descriptor`, strips that meta
-   section out, and stores the resulting `JsonTemplate` under `cucId` (`template1`).
-
-3. **`I create models from template {word}:`** reads the referenced template, then for
-   each row deep-copies the base JSON and applies the row's columns as overrides before
-   deserializing into the target type. The built model is stored under its `cucId`
-   (`order1`), ready to be used as `${order1}`.
-
-### Cell conventions for overrides
-
-| Cell value | Effect on that field |
-|------------|----------------------|
-| *(blank)* | inherit the stub's value (the common case) |
-| `(NULL)` | set the field to an explicit JSON `null` |
-| `""` | set the field to an explicit empty string `""` |
-| dotted key, e.g. `customer.country` | override a **nested** field |
-| indexed key, e.g. `items[0].quantity` | override an element of a **nested array** |
-| anything else | run through JEXL (`resolveField`) just like a normal table cell |
-
-A blank cell means "leave it alone", so clearing an inherited field needs an explicit
-marker — `(NULL)` for `null`, `""` for an empty string:
-
-```gherkin
-Given I create models from template template1:
-  | cucId  | customer.name | customer.country |
-  | order1 | ""            | (NULL)           |   # name -> "", country -> null
-```
-
-
-Because overrides are keyed by **column name**, a nested field is addressed with a dotted
-path (`customer.country`) and an array element with an indexed one (`items[0].quantity`);
-`JsonTemplate.setPath` walks/creates the intermediate objects, arrays and elements.
-One template can spawn several models in a single table — each row patches a different
-slice:
-
-```gherkin
-Given I create models from template template1:
-  | cucId  | items[0].sku | items[0].quantity | customer.country |
-  | order1 | console      | 2                 |                  |   # country inherits "US"
-  | order2 | laptop       | 1                 | DE               |   # country overridden, name inherited
-```
-
-### Decomposing nested collections and objects
-
-Full paths work, but real models nest deeply, so repeating `items[0].`, `items[1].`,
-`customer.` in every header makes tables wide and hard to read. Headers can instead be
-written in a **decomposed** form that opens a scope once and keeps the following columns
-short:
-
-| Header form | Meaning |
-|-------------|---------|
-| `customer:` | open an **object scope** — the following `.field` columns are relative to `customer` |
-| `items[]` | open a **collection scope** — the cell under it is a *selector* that fills the brackets |
-| `.components[]` | a relative column ending in `[]` opens a collection scope **nested inside the current scope** |
-| `.name`, `.quantity` | **relative** column, appended to the currently open scope (`customer.name`, `items[0].quantity`) |
-| `price`, `customer.country` | a plain header is still a full **root path** and resets the scope |
-
-A collection cell holds a selector in brackets:
-
-| Selector | Effect |
-|----------|--------|
-| `[0]` | patch element 0 |
-| `[+]` | append a brand-new element |
-| `[sku=widget]` | patch the element whose `sku` equals `widget`, appending one if nothing matches |
-| *(blank)* | stay on the element this column resolved on the previous row — a continuation row |
-
-Elements are **rows**, not columns: the row that carries a `cucId` starts a new model and
-holds its first element; a row with a **blank** `cucId` keeps adding elements to the model
-above it. Because of that, one table can give each model a *different* number of elements —
-impossible with a fixed set of `items[0]…items[n]` headers:
-
-```gherkin
-Given I create models from template template1:
-  | cucId  | items[] | .sku    | .quantity |
-  | order1 | [0]     | console | 2         |   # order1 has two items…
-  |        | [1]     | mouse   | 1         |   #   (extra element on a blank-cucId row)
-  | order2 | [0]     | laptop  | 5         |   # …order2 has one
-```
-
-Object and collection scopes can appear side by side in the same table. Here `customer:`
-patches the nested customer, `[+]` appends an item, and `[sku=widget]` edits the stub's
-existing widget in place:
-
-```gherkin
-Given I create models from template template1:
-  | cucId  | customer: | .name | .country | items[]      | .sku  | .quantity |
-  | order1 |           | Ada   | GB       | [+]          | cable | 7         |
-  |        |           |       |          | [sku=widget] |       | 42        |
-```
-
-`TemplateSteps` resolves each selector to a concrete `items[N]` index once per row (seeding
-an append cursor from the stub's current element count), so both `.sku` and `.quantity` on a
-row land on the *same* element, and `JsonTemplate.setPath` then walks/creates the path.
-
-#### Collections nested inside collection elements
-
-Decomposition pays off most when a collection lives *inside* another collection's elements —
-here each line item carries its own `components` list. A `.components[]` header (a relative
-column that itself ends in `[]`) opens a collection scope **nested inside the current item**,
-so the `.name` / `.quantity` columns after it resolve against `items[<i>].components[<j>]`:
-
-```gherkin
-Given I create models from template template1:
-  | cucId  | items[] | .sku   | .components[] | .name  | .quantity |
-  | order1 | [0]     | laptop | [0]           | cpu    | 1         |
-  |        |         |        | [1]           | ram    | 2         |   # same item, 2nd component
-  |        | [1]     | mouse  | [0]           | sensor | 1         |   # next item, its 1st component
-  | order2 | [0]     | desk   | [+]           | drawer | 3         |
-```
-
-Two rules make this readable:
-
-* **Columns are positional** — an item's own fields (`.sku`) must come *before* its
-  `.components[]` opener, because the scope is `items[0]` up to the opener and
-  `items[0].components[<j>]` after it.
-* **A blank collection cell continues the current element** — a non-blank selector under
-  `items[]` *starts* a new item, while a blank cell re-enters the item from the row above, so
-  the second component row needs no item selector. Each element keeps its own append cursor
-  (keyed by the full `items[0].components` path), so order1's two items end up with component
-  lists of *different* sizes (2 and 1) in a single table.
-
-### Validating models with a table (`I expect models match:`)
-
-The same decomposition grammar reads as well as it writes. A cluster of
-`I expect that ${order1.items()...} equals ...` steps can collapse into one
-`Then I expect models match:` table whose columns address a **stored** model exactly like
-the creation table — only now each `.field` cell is an **expected** value, not an override:
-
-```gherkin
-Then I expect models match:
-  | cucId  | items# | items[] | .sku   | .components# | .components[] | .name  | .quantity |
-  | order1 | 2      | [0]     | laptop | 2            | [0]           | cpu    | 1         |
-  |        |        |         |        |              | [1]           | ram    | 2         |
-  |        |        | [1]     | mouse  | 1            | [0]           | sensor | 1         |
-```
-
-The row/scope rules are identical to creation: the `cucId` names the stored root (fetched
-from the scenario store), `items[]` / `.components[]` open (outer / nested) collection
-scopes, a blank collection cell continues the element from the row above, and `.field`
-columns are relative to the active scope. Cells are placeholder- and JEXL-aware (`(NULL)`,
-`""`, `${ ... }`) and each one is compared against the actual value **using its runtime
-type**, so the string cell `1` matches an `Integer`, `9.99` a `Double`, and so on.
-
-Two things differ from the creation table:
-
-* **Subset by default** — only the cells you list are asserted; unlisted fields and extra
-  collection elements are ignored. Collection **sizes are therefore not pinned** unless you
-  ask. Opt in with a `#` column: a plain `items#` pins the outer list, a relative
-  `.components#` (placed after its `items[]` opener so the scope is set) pins the list inside
-  the current item. The cell is the expected count.
-* **Addressing-only selectors** — `[n]`, a blank cell (continue), and `[field=value]` (the
-  first element whose `field` equals `value`) locate an element to assert. `[+]` has no
-  meaning when reading and is rejected. Matchers make order-independent assertions easy:
-
-```gherkin
-And I expect models match:
-  | cucId  | items[]     | .sku  | .components[] | .quantity |
-  | order1 | [sku=mouse] | mouse | [name=sensor] | 1         |
-```
-
-`ModelValidationSteps` navigates the stored model reflectively (record accessors like
-`items()` / `name()` plus list `get(index)`), resolving each selector against the *actual*
-list, then compares with `usingRecursiveComparison()` after coercing the expected cell to the
-actual field's type.
-
-### Adding a new stub
-
-1. Drop the JSON under `src/test/resources/stubs/`.
-2. Give it an `@descriptor` section declaring the model type:
-   `{ "@descriptor": { "type": "org.dominys.ittests.api.model.Order" }, ... }`.
-
-No Java or glue changes needed — the two steps are type-agnostic and the loader reads
-everything it needs from the file.
-
----
-
-## Extending the infrastructure
-
-`cujex-core` is domain-agnostic: it ships the context store, JEXL engine, template
-loader and generic steps, but knows nothing about orders. A new suite consumes it and
-adds only its own domain glue. This example module (`order-service-it`) **is** that
-extension — use it as the template.
-
-### Wiring a new suite onto `cujex-core`
-
-1. **Depend on it** (test scope):
-   ```xml
-   <dependency>
-       <groupId>io.github.dominys</groupId>
-       <artifactId>cujex-core</artifactId>
-       <scope>test</scope>
-   </dependency>
-   ```
-2. **Import the Spring config** from your `@CucumberContextConfiguration` context so the
-   context store, JEXL functions and generic steps get picked up (see `TestConfig`):
-   ```java
-   @Import(CujexCoreConfig.class)
-   ```
-3. **Add both glue packages to the Cucumber glue path** — your own plus the framework's
-   (see `RunCucumberIT`):
-   ```java
-   @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.acme.it, io.github.dominys.cujex")
-   ```
-
-### Register a domain type (tables / params) — the `OrderTypes` pattern
-
-Write a small glue class that autowires `ScenarioContext` and reuses the static
-`ParameterTypes.toRecord(...)` / `resolveRow(...)` helpers. **Do not extend
-`ParameterTypes`** — Cucumber would double-register the inherited `@DataTableType` /
-`@DefaultParameterTransformer` methods and fail. Keep them as independent glue classes
-(`OrderTypes` is the canonical example):
-
-```java
-public class OrderTypes {
-
-    private final ScenarioContext scenarioContext;
-
-    @Autowired
-    public OrderTypes(ScenarioContext scenarioContext) {
-        this.scenarioContext = scenarioContext;
-    }
-
-    // inline {myDto} parameter:
-    @ParameterType(value = ".*", name = "myDto")
-    public MyDto myDto(String ref) {
-        return scenarioContext.resolveField(ref);
-    }
-
-    // data-table row -> typed record:
-    @DataTableType
-    public BaseCucRecord<MyDto> myDtoRecord(Map<String, String> row) {
-        return ParameterTypes.toRecord(row, scenarioContext, new TypeReference<>() {});
-    }
-}
-```
-For field editing (`EditFieldsRecord` / the edit steps) to work, the DTO needs a builder
-whose setter method names equal the field names. The api model records get this for free
-from Lombok `@Builder(toBuilder = true)` + `@Jacksonized` (see `Order`/`Customer`).
-
-### Add a domain step
-
-Extend `io.github.dominys.cujex.steps.BaseSteps` (gives you the autowired
-`ScenarioContext` + `ScenarioContextStore`) and add your `@Given`/`@When`/`@Then`
-methods — `OrderSteps` is the example driving the REST client.
-
-### Add a JEXL function
-There are four ways to expose functions to `${...}` expressions, in increasing
-decoupling from the framework.
-
-**a) A built-in (framework-owned).** Add a `public static` method to
-`CucJexlFunctions` in `cujex-core`:
-
-```java
-public static String upper(String s) { return s.toUpperCase(); }
-```
-Use it as `${upper(`abc`)}`.
-
-**b) Extra functions in the default namespace (consumer-owned).** Your suite can
-contribute functions callable *without* a prefix — next to the built-ins — by
-subclassing `CucJexlFunctions` (to keep `now()`/`uuid()`) and implementing
-`CujexJexlFunctions` with a blank namespace. See `OrderJexlFunctions`:
-
-```java
-public class OrderJexlFunctions extends CucJexlFunctions implements CujexJexlFunctions {
-    public String namespace() { return ""; }   // default namespace
-    public Object functions() { return this; }
-    public int taxed(int amount, int percent) { return amount + amount * percent / 100; }
-}
-```
-Register it as a `@Bean` (see `TestConfig`) and use it as `${taxed(100, 20)}`.
-
-**c) A custom namespace (consumer-owned).** Return a non-blank `namespace()` to
-expose functions under a prefix, leaving the default namespace untouched. See
-`MathJexlFunctions`:
-
-```java
-public class MathJexlFunctions implements CujexJexlFunctions {
-    public String namespace() { return "math"; } // callable as ${math:...}
-    public Object functions() { return this; }
-    public int max(int a, int b) { return Math.max(a, b); }
-}
-```
-Register it as a `@Bean` and use it as `${math:max(3, 7)}`. `ScenarioContext`
-discovers every `CujexJexlFunctions` bean automatically via `ObjectProvider`;
-`functions()` may return `this` (instance methods) or a `Class` (static methods).
-
-**d) A context-aware function (consumer-owned).** To let a function read the
-scenario context, return your own `Class` from `functions()` and add a constructor
-that takes the `CujexJexlContext`. JEXL then builds a fresh functor per evaluation
-and injects the live context, from which you can reach the whole `ScenarioContext`
-(e.g. to resolve another expression). See `ContextAwareJexlFunctions`:
-
-```java
-public class ContextAwareJexlFunctions implements CujexJexlFunctions {
-    private final CujexJexlContext context;
-    public ContextAwareJexlFunctions() { this.context = null; }              // Spring descriptor
-    public ContextAwareJexlFunctions(CujexJexlContext ctx) { this.context = ctx; } // JEXL functor
-    public String namespace() { return "ctx"; }
-    public Object functions() { return ContextAwareJexlFunctions.class; }    // a Class -> context injected
-    public Object ref(String expr) {
-        return context.scenarioContext().resolveField("${" + expr + "}");
-    }
-}
-```
-Register it as a `@Bean` and use it as `${ctx:ref('created.id()')}`. Because a new
-functor is created per evaluation against the current context, this is thread-safe
-and always sees the scenario's latest state. Resolution of `I define scenario
-variables:` is write-through - each row is stored before the next is resolved - so a
-later cell can reference an earlier one in the *same* table, directly (`${limit}`) or
-through a context-aware function (`${ctx:ref('limit')}`).
-`06_custom_jexl_functions.feature` exercises (b), (c) and (d).
-
-### Add an endpoint
-Keep the contract in lock-step across modules:
-
-1. Add the method to `OrderApi` (client module) with explicitly-named parameters.
-2. Mirror it in `OrderController` (service module).
-3. Use it from a step via the autowired `OrderApi`.
-
-### Messaging over Kafka (the `cujex-kafka` extension)
-
-Kafka support is **not** in `cujex-core` — it lives in a separate, opt-in sibling
-module, `cujex-kafka`. Core stays messaging-free; a suite that needs Kafka adds the
-extension explicitly. `07_kafka_messaging.feature` is the worked example.
-
-**What the extension provides**
-
-* **One long-lived consumer per topic for the whole run** (`KafkaTopicConsumer`,
-  managed by `KafkaConsumerManager`). Consumers are suite-singletons started once at
-  context refresh, not per scenario.
-* **A fan-out bus** (`KafkaMessageBus`) that delivers every incoming message to all
-  active scenario inboxes.
-* **A per-scenario inbox** (`ScenarioKafkaInbox`, `@Scope("cucumber-glue")`) that
-  buffers messages and exposes an **Awaitility**-backed `awaitMessage(predicate)`.
-  Each scenario filters to *its own* criteria (typically the order id it created), so
-  scenarios sharing a topic stay isolated — the suite is **parallel-safe**.
-* **A consumer-group-readiness wait** (`KafkaConsumerGroupWaiter`): because group
-  formation takes time, the manager uses the Kafka Admin API + Awaitility to block at
-  startup until every required group is `STABLE` with assigned partitions, before any
-  scenario runs.
-* **A simple producer** (`KafkaProducerSupport`, `acks=all`, flush) for driving input
-  topics from steps. It sends raw `byte[]`, with `String` overloads that UTF-8-encode
-  text/JSON so the common cases stay one-liners.
-* **A payload-agnostic transport.** `KafkaMessage` carries the record's raw `byte[]`
-  key/value — what Kafka actually transmits — so the harness is not tied to String/JSON.
-  Steps decode at the edge: `valueAsString()` for text/JSON, or `value(PayloadDecoder)`
-  for any binary format (e.g. `message.value(OrderEvent::parseFrom)` for **Protobuf**,
-  or an Avro/JSON reader). The fan-out bus and inbox stay format-neutral.
-
-**Wiring it onto a suite** (see `TestConfig` + the `order-service-it` harness)
-
-1. **Depend on it** (test scope), alongside a Kafka Testcontainer:
-   ```xml
-   <dependency>
-       <groupId>io.github.dominys</groupId>
-       <artifactId>cujex-kafka</artifactId>
-       <scope>test</scope>
-   </dependency>
-   <dependency>
-       <groupId>org.testcontainers</groupId>
-       <artifactId>testcontainers-kafka</artifactId>
-       <scope>test</scope>
-   </dependency>
-   ```
-2. **Import the lite config** (it has no stereotype, so it is activated only by an
-   explicit import — it never leaks into the core component-scan):
-   ```java
-   @Import({ CujexCoreConfig.class, CujexKafkaConfig.class })
-   ```
-3. **Provide a `CujexKafkaSettings` bean** naming the bootstrap servers, the topics to
-   consume, and the consumer groups to await:
-   ```java
-   @Bean
-   @DependsOn("orderApi")            // ensure the service container is up first
-   CujexKafkaSettings cujexKafkaSettings() {
-       return new CujexKafkaSettings(
-           KafkaUnderTest.bootstrapServers(),
-           List.of(OrderTopics.ORDER_EVENTS),
-           List.of("order-service"));
-   }
-   ```
-
-**Container ordering.** The broker must be up before the service (the service reads its
-bootstrap address from the environment) and before the Cujex consumers start. This is
-enforced entirely in the *example*, not the library: `ServiceUnderTest` joins the shared
-`KafkaUnderTest` network and passes the in-network bootstrap address as an env var
-(touching `KafkaUnderTest` starts the broker), and the `CujexKafkaSettings` bean is
-`@DependsOn("orderApi")` so the group-readiness wait only runs once the service is live.
-
-**Steps** (`OrderKafkaSteps`, extends `BaseSteps`)
-
-```gherkin
-When I send a status update command:
-  | orderId         | status |
-  | ${created.id()} | PAID   |
-
-Then I await an order event matching and store result in event:
-  | type          | orderId         | status |
-  | ORDER_CREATED | ${created.id()} | NEW    |
-```
-
-The await step builds a predicate from the table (every cell resolved through JEXL),
-reads each buffered message's value as a UTF-8 `String` and matches its JSON
-field-by-field; on the first match it decodes the event via a `PayloadDecoder`
-(`message.value(bytes -> OBJECT_MAPPER.readValue(bytes, OrderEvent.class))`) and stores
-it under the result key so later steps can assert on it with the generic validation
-steps. A Protobuf suite would swap only that decoder for `OrderEvent::parseFrom` — the
-rest of the extension is unchanged.
-
----
-
-## Notes & gotchas
-
-- **Tests cannot import service classes.** This is enforced by the module graph:
-  `order-service-it` only has `order-service-api-client` (and its transitive
-  `order-service-api-model`) on its classpath. Interact via `OrderApi`.
-- **Reactor build order matters.** `./mvnw verify` from the root builds the service jar
-  *before* the IT module builds the Docker image from it. Running the IT module in
-  isolation requires the service jar to already be installed.
-- **Jackson across the boundary.** The service (Boot 4) serializes with Jackson 3; the
-  tests use Jackson 2. Records round-trip over plain JSON, so the two sides interoperate
-  without sharing a Jackson version.
-- **JEXL 3.3 sandbox.** JEXL 3.3 restricts method/class access by default, which blocks
-  calls like `now(...)` and entity accessors. `ScenarioContext` lifts this with
-  `JexlPermissions.UNRESTRICTED` — acceptable because test data is fully trusted.
-- **Array literals are Java arrays.** `${[`a`,`b`]}` evaluates to `String[]`. Jackson
-  converts it to a `List` when mapping a field; when comparing directly, normalise both
-  sides to a `List` first (see `GeneralValidationSteps`).
-- **Edit tables use a header row.** The "edit fields" table is horizontal:
-  first row = field names, second row = values.
-- **No Spring Boot in the tests.** A plain Spring `@Configuration` + `@ContextConfiguration`
-  keeps the test context light while preserving the `cucumber-glue` scope.
+**Requirements:** JDK 21 (Maven is provided via the wrapper `./mvnw`). Running the
+example suite additionally needs a running **Docker** daemon (Testcontainers). On
+**Rancher Desktop** / **Colima**, or when running from IntelliJ, a little Testcontainers
+socket configuration is needed — see
+[examples/README.md → Running](examples/README.md#running).
+
+## Documentation
+
+| Where | What |
+|-------|------|
+| **[cujex-core/README.md](cujex-core/README.md)** | The framework: core concepts, integration quick-start, and a docs index. Start here to use Cujex in your own suite. |
+| ├ [docs/scenario-context.md](cujex-core/docs/scenario-context.md) | Concept 1 — per-scenario memory |
+| ├ [docs/jexl-preprocessing.md](cujex-core/docs/jexl-preprocessing.md) | Concept 2 — `${...}` resolution |
+| ├ [docs/json-templates.md](cujex-core/docs/json-templates.md) | Concept 3 — stubs, overrides, decomposition, validation |
+| └ [docs/extending.md](cujex-core/docs/extending.md) | Wiring a suite, domain types, steps, JEXL functions, endpoints |
+| **[cujex-kafka/README.md](cujex-kafka/README.md)** | The opt-in Kafka extension: what it provides, wiring, container ordering, steps, payload-agnostic transport. |
+| **[examples/README.md](examples/README.md)** | The order-service example: modules, how the test talks to the service, running details (Docker/Rancher/IDE), feature files, and gotchas. |
