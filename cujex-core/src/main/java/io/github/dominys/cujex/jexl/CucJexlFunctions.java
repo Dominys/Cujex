@@ -7,7 +7,7 @@ import java.time.Instant;
  * Custom functions exposed to JEXL expressions used inside feature files.
  *
  * <p>Every {@code public static} method here becomes callable from a
- * {@code ${...}} expression because {@link ScenarioContext} registers this class
+ * {@code ${...}} expression because {@link io.github.dominys.cujex.context.ScenarioContext} registers this class
  * under the default (anonymous) JEXL namespace. For example, a data-table cell
  * containing:
  *

@@ -7,7 +7,7 @@ import java.util.Map;
  * used to patch specific fields of an existing entity.
  *
  * <p>Produced from an "edit" data table and consumed by
- * {@link ScenarioContext#updateRecordBuilderFields}.
+ * {@link io.github.dominys.cujex.context.ScenarioContext#updateRecordBuilderFields}.
  */
 public record EditFieldsRecord(Map<String, Object> fields) {
 }

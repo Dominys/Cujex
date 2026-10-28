@@ -20,12 +20,16 @@ extension — use it as the template.
 2. **Import the Spring config** from your `@CucumberContextConfiguration` context so the
    context store, JEXL functions and generic steps get picked up (see `TestConfig`):
    ```java
+   @CucumberContextConfiguration
    @Import(CujexCoreConfig.class)
+   public class CucumberSpringConfiguration { }
    ```
 3. **Add both glue packages to the Cucumber glue path** — your own plus the framework's
    (see `RunCucumberIT`):
    ```java
+   @Suite
    @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.acme.it, io.github.dominys.cujex")
+   public class RunCucumberIT { }
    ```
 
 ## Register a domain type (tables / params) — the `OrderTypes` pattern

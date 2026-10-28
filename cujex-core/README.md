@@ -36,11 +36,15 @@ types, add steps, add JEXL functions (four ways), add endpoints.
    ```
 2. **Import** the Spring config from your `@CucumberContextConfiguration` context:
    ```java
+   @CucumberContextConfiguration
    @Import(CujexCoreConfig.class)
+   public class CucumberSpringConfiguration { }
    ```
 3. **Add both glue packages** to the Cucumber glue path — your own plus the framework's:
    ```java
+   @Suite
    @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.acme.it, io.github.dominys.cujex")
+   public class RunCucumberIT { }
    ```
 
 No Spring Boot is required; a plain Spring `@Configuration` + `@ContextConfiguration`

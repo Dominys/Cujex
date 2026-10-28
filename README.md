@@ -44,6 +44,66 @@ Scenario: Creating an order publishes an ORDER_CREATED event
   And I expect that ${event.price()} equals ${150.0}
 ```
 
+## How it compares
+
+Most suites that test a service reach for one of the approaches below. Each trades
+away either **fidelity** (are you testing the thing you ship?) or **maintainability**
+(can a human still read and change the tests a year later?). Cujex is an attempt to
+keep both.
+
+| Common approach | The pain it brings | What Cujex does instead |
+|-----------------|--------------------|-------------------------|
+| **JUnit + `@SpringBootTest` / `MockMvc`** | Runs the service *in-process* and lets you swap pieces out with `@MockBean`, so you validate your own wiring — not the artifact you actually deploy. Real serialization, container config, startup and the HTTP/Kafka transport all go untested. | Drives the service as a true **black box**: it runs as the packaged Docker image (started by Testcontainers) and is reached only over REST/Kafka through a shared API artifact — the test never has the service classes on its classpath. |
+| **Building request objects in Java** (builders / fixtures) | Every new field or case is a code change and a recompile, and only Java developers can read or write the tests. Fixture helpers sprawl and quietly drift from the model. | Scenarios are **Gherkin + data tables**. The request is a shared JSON stub; a scenario lists only the columns it overrides — no builder code, no recompile to add a case. |
+| **One JSON file per scenario** | A folder of near-identical stubs — "JSON hell". You cannot see at a glance *what each scenario changes*, and one model change means editing dozens of files. | **One stub per model**, loaded once in a `Background`; each scenario overrides just the fields it exercises. What differs is the only thing on screen; the shared shape lives in a single place. |
+| **Jinja2 / templated JSON** | Bolts a second language (loops, conditionals, includes) onto JSON. Logic hides inside templates, and now you debug the templating engine *and* the test. | No templating language. Overrides are **plain table columns** (`items[0].sku`, or the decomposed `items[] / .sku` form); nesting, appends and match-by-field are grammar, not code. |
+| **Plain Cucumber with bespoke glue** | Every suite re-implements the same plumbing — a context store, cross-step references, JSON loading, generic assertions — a little differently each time, and maintains it forever. | Cujex *is* that plumbing, factored out and reusable: scenario context, `${...}` referencing, the template engine and generic create/validate steps ship behind one import. You add only domain steps. |
+
+HTTP-focused DSLs such as **Karate** or **REST-assured** solve the transport side well,
+but bring their own assertion/HTTP dialect and keep test data as JSON or script. Cujex
+stays on **standard Gherkin** and your **real typed domain records** — the same
+`api-model` and generated client your production code uses — so types, serialization and
+the client library are exercised for real and shared, not re-described in a test-only
+language.
+
+### By the numbers
+
+For a suite of ten scenarios that all vary the same base model (figures are
+illustrative, from faithful equivalents of one representative scenario, token‑counted
+with a GPT‑4‑class tokenizer):
+
+- **Files to maintain:** one shared stub, versus **ten** near‑identical files in the
+  one‑JSON‑per‑scenario approach.
+- **Author‑written size:** per‑scenario JSON costs about **1.7× the tokens** of the
+  equivalent Cujex override tables, and Java builders about **1.35×** — Cujex adds a
+  short row per scenario while the base is written once.
+- **Signal‑to‑noise:** a Cujex scenario lists *only the fields it changes* — four
+  override cells here — while the file‑ and builder‑based styles restate the whole
+  object every time. That is the ratio that matters for an AI agent: it regenerates a
+  few explicit values instead of a full model it could silently corrupt.
+- **Review effort:** a new scenario is a few‑row diff whose every line *is* a decision,
+  so a reviewer checks only what changed. A new JSON file or builder shows up as a wall
+  of mostly‑duplicated context, where the one meaningful difference has to be hunted for
+  — the kind of diff that gets rubber‑stamped.
+
+(Raw token count is close to a Jinja2 template, which wins on size alone — but only by
+adding a second templating language and the maintenance that comes with it. The point of
+Cujex is to stay small *and* keep everything in plain Gherkin against your real types.)
+
+### Readable — and writable — by non-developers and AI agents
+
+Because a scenario is Gherkin plus declarative tables, the people who define behaviour
+can read and review it directly: product owners, analysts, QA, support. There is no Java
+to decode in order to understand what a test asserts, and the columns name exactly the
+fields a case depends on.
+
+The same shape makes Cujex an unusually good target for **AI agents**. A constrained,
+declarative grammar — a fixed set of steps plus table columns — is far easier for a model
+to generate *correctly* than imperative setup code: there is less surface to get wrong,
+every override is explicit, and a failure comes back in domain terms
+(`${event.price()} equals ...`) rather than a stack trace, so an agent can read the
+result and iterate.
+
 ## Add Cujex to your suite
 
 1. **Depend** on the core at test scope (currently `1.0-SNAPSHOT`, build from source —
@@ -57,11 +117,15 @@ Scenario: Creating an order publishes an ORDER_CREATED event
    ```
 2. **Import** the Spring config from your `@CucumberContextConfiguration` context:
    ```java
+   @CucumberContextConfiguration
    @Import(CujexCoreConfig.class)
+   public class CucumberSpringConfiguration { }
    ```
 3. **Add both glue packages** to the Cucumber glue path — your own plus the framework's:
    ```java
+   @Suite
    @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.acme.it, io.github.dominys.cujex")
+   public class RunCucumberIT { }
    ```
 
 No Spring Boot is required; a plain Spring `@Configuration` + `@ContextConfiguration`

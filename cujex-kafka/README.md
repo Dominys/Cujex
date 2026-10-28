@@ -50,7 +50,9 @@ See `TestConfig` + the `order-service-it` harness.
 2. **Import the lite config** (it has no stereotype, so it is activated only by an
    explicit import — it never leaks into the core component-scan):
    ```java
+   @CucumberContextConfiguration
    @Import({ CujexCoreConfig.class, CujexKafkaConfig.class })
+   public class CucumberSpringConfiguration { }
    ```
 3. **Provide a `CujexKafkaSettings` bean** naming the bootstrap servers, the topics to
    consume, and the consumer groups to await:

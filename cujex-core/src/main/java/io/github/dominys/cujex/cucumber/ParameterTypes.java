@@ -42,7 +42,7 @@ import java.util.stream.IntStream;
  * and reuses the static helpers here:
  * <ul>
  *     <li>accept an entity in tables - add a {@code @DataTableType} method returning
- *         {@link #toRecord(Map, ScenarioContext, TypeReference) toRecord(row, ctx, new TypeReference<>(){})};</li>
+ *         {@link #toRecord(Map, ScenarioContext, TypeReference) toRecord(row, ctx, new TypeReference&lt;&gt;(){})};</li>
  *     <li>accept it as an inline {@code {param}} - add a {@code @ParameterType} method
  *         returning {@code ctx.resolveField(s)};</li>
  *     <li>resolve an arbitrary row yourself - call

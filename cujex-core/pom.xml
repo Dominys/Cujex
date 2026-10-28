@@ -10,9 +10,6 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <!-- Published as io.github.dominys per the Maven Central convention for
-         projects hosted at github.com/Dominys (no custom domain required). -->
-    <groupId>io.github.dominys</groupId>
     <artifactId>cujex-core</artifactId>
 
     <name>cujex-core</name>

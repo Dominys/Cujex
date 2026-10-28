@@ -19,7 +19,8 @@ import com.fasterxml.jackson.annotation.JsonUnwrapped;
  * payload fields next to {@code cucId} in the same row.
  *
  * <p>A step then stores {@code data} under {@code cucId} in the
- * {@link ScenarioContextStore}, making it reachable as {@code ${customer1}}.
+ * {@link io.github.dominys.cujex.context.ScenarioContextStore}, making it reachable
+ * as {@code ${customer1}}.
  *
  * @param <T> the payload type for this row
  */
