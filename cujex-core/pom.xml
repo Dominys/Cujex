@@ -63,6 +63,13 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
         </dependency>
+
+        <!-- JUnit 5: unit tests for the pure template/addressing logic. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
