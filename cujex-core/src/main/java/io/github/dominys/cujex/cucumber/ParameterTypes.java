@@ -20,6 +20,7 @@ import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 /**
@@ -30,11 +31,11 @@ import java.util.stream.IntStream;
  * <ul>
  *     <li><b>{@link #OBJECT_MAPPER}</b> - the single Jackson mapper used everywhere
  *         to convert maps/rows into records. Deliberately a shared, extensible
- *         singleton: a suite may register custom modules/deserializers on it (see
+ *         singleton: a suite customizes it once at setup via {@link #configure}
+ *         (e.g. register a module or custom deserializer; see
  *         {@link CucIdsToListDeserializer}). Jackson's {@code ObjectMapper} is
- *         thread-safe once configured, so treat configuration as one-time setup -
- *         register modules and set features during glue initialization, never
- *         mutate it mid-scenario.</li>
+ *         thread-safe once configured, so treat configuration as one-time setup and
+ *         never mutate it mid-scenario.</li>
  *     <li><b>{@code @ParameterType} methods</b> - convert inline step arguments like
  *         {@code {order}} by JEXL-resolving them against the scenario context.</li>
  *     <li><b>{@code @DataTableType} methods</b> - convert data-table rows into typed
@@ -63,16 +64,40 @@ import java.util.stream.IntStream;
 public class ParameterTypes {
 
     /**
-     * The single, shared Jackson mapper for the whole suite. Intentionally public and
-     * mutable so suites can extend it (e.g. register a module or custom deserializer)
-     * once at setup; it is thread-safe for conversion once configured. Do not reconfigure
-     * it per scenario.
+     * The single, shared Jackson mapper for the whole suite. Cujex applies a sensible
+     * default configuration (below); suites extend it through {@link #configure} rather
+     * than reaching into this field. It is thread-safe for conversion once configured,
+     * so treat customization as one-time setup and never reconfigure it per scenario.
      */
     public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .configure(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS, false)
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
             .configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true);
+
+    /**
+     * Apply a one-time customization to the shared {@link #OBJECT_MAPPER} - register a
+     * module, enable/disable a feature, set a naming strategy, etc. This is the
+     * supported hook for suites that need Jackson configured beyond Cujex's defaults.
+     *
+     * <p>Call it exactly once during suite setup, before any scenario runs - for example
+     * from a static initializer in your glue or a {@code @BeforeAll}-style hook. The
+     * mapper is thread-safe for conversion but <em>not</em> for reconfiguration while in
+     * use, so do not call this mid-run or per scenario.
+     *
+     * <pre>{@code
+     * ParameterTypes.configure(mapper -> mapper
+     *         .registerModule(new MyDomainModule())
+     *         .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE));
+     * }</pre>
+     *
+     * @param customizer receives the shared mapper to configure in place
+     * @return the configured mapper, for chaining or inspection
+     */
+    public static ObjectMapper configure(Consumer<ObjectMapper> customizer) {
+        customizer.accept(OBJECT_MAPPER);
+        return OBJECT_MAPPER;
+    }
 
     private final ScenarioContext scenarioContext;
 

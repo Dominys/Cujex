@@ -15,8 +15,8 @@ import static io.github.dominys.cujex.cucumber.CucConstants.ID_NAMES_SEPARATOR;
  * into a {@code List<String>}.
  *
  * <p>Kept from the original source as an example of a custom deserializer you can
- * register on {@link ParameterTypes#OBJECT_MAPPER} when a single data-table cell
- * should map to a list without JEXL array syntax.
+ * register via {@link ParameterTypes#configure(java.util.function.Consumer)} when a
+ * single data-table cell should map to a list without JEXL array syntax.
  */
 public class CucIdsToListDeserializer extends StdDeserializer<List<String>> {
 

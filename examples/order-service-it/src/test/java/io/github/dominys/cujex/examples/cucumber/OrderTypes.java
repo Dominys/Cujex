@@ -1,6 +1,7 @@
 package io.github.dominys.cujex.examples.cucumber;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import io.cucumber.java.DataTableType;
 import io.cucumber.java.ParameterType;
 import io.github.dominys.cujex.context.ScenarioContext;
@@ -26,8 +27,24 @@ import java.util.Map;
  * <p>Note this class does <em>not</em> extend {@link ParameterTypes}: Cucumber
  * would otherwise register the inherited {@code @Default*}/{@code @DataTableType}
  * methods twice and fail. Instead it reuses the public static helpers.
+ *
+ * <p>It also shows the third extension point - customizing the shared Jackson
+ * mapper. The static initializer below calls
+ * {@link ParameterTypes#configure(java.util.function.Consumer)} exactly once, when
+ * Cucumber loads this glue class and before any scenario runs, to relax how blank
+ * table cells map onto records suite-wide. That is the supported place for
+ * suite-specific Jackson configuration (register a module, set a naming strategy,
+ * enable a feature, ...).
  */
 public class OrderTypes {
+
+    static {
+        // Extension point: configure the one shared ObjectMapper once, up front. Here we
+        // let an empty table cell bind to a null nested object instead of failing. Do this
+        // at load/setup time only - never per scenario.
+        ParameterTypes.configure(mapper ->
+                mapper.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT));
+    }
 
     @Autowired
     private ScenarioContext scenarioContext;
