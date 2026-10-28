@@ -3,6 +3,8 @@ package io.github.dominys.cujex.kafka;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -41,7 +43,22 @@ public record KafkaMessage(String topic,
                            Map<String, String> headers) {
 
     public KafkaMessage {
-        headers = headers == null ? Map.of() : Map.copyOf(headers);
+        headers = nullTolerantCopy(headers);
+    }
+
+    /**
+     * An unmodifiable snapshot of {@code headers} that tolerates {@code null} values.
+     *
+     * <p>Kafka header values are legitimately nullable, and {@link KafkaTopicConsumer}
+     * maps a null header value to a null entry. {@link Map#copyOf} would reject those
+     * with a {@link NullPointerException}, which - thrown from the poll loop - would
+     * silently kill the topic consumer, so a {@link LinkedHashMap} copy is used instead.
+     */
+    private static Map<String, String> nullTolerantCopy(Map<String, String> headers) {
+        if (headers == null || headers.isEmpty()) {
+            return Map.of();
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<>(headers));
     }
 
     /** The key decoded as UTF-8 text, or {@code null} if the key is {@code null}. */

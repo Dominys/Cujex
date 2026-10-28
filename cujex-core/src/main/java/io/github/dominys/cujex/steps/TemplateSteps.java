@@ -13,6 +13,10 @@ import java.util.List;
 import java.util.Map;
 
 import static io.github.dominys.cujex.cucumber.CucConstants.CUC_REF_ID_FIELD;
+import static io.github.dominys.cujex.steps.DecompositionSupport.isBlank;
+import static io.github.dominys.cujex.steps.DecompositionSupport.requireScope;
+import static io.github.dominys.cujex.steps.DecompositionSupport.scopePath;
+import static io.github.dominys.cujex.steps.DecompositionSupport.stripBrackets;
 
 /**
  * Steps for the "mixed template" request/response model approach.
@@ -195,19 +199,10 @@ public class TemplateSteps extends BaseSteps {
             return scopeByColumn.get(header);
         }
         var name = header.substring(0, header.length() - 2);
-        var collection = name.startsWith(".") ? requireScope(scope, header) + name : name;
+        var collection = scopePath(scope, name, header);
         var resolved = resolveCollectionScope(template, collection, stripBrackets(cell), overrides, appendCursor);
         scopeByColumn.put(header, resolved);
         return resolved;
-    }
-
-    private static String requireScope(String scope, String header) {
-        if (scope == null) {
-            throw new IllegalStateException(
-                    "Relative column '%s' has no open scope - precede it with a '...:' or '...[]' opener"
-                            .formatted(header));
-        }
-        return scope;
     }
 
     /**
@@ -244,16 +239,5 @@ public class TemplateSteps extends BaseSteps {
             throw new IllegalArgumentException("Unsupported element selector '[%s]'".formatted(selector));
         }
         return "%s[%d]".formatted(collection, index);
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private static String stripBrackets(String cell) {
-        var trimmed = cell.trim();
-        return trimmed.startsWith("[") && trimmed.endsWith("]")
-                ? trimmed.substring(1, trimmed.length() - 1)
-                : trimmed;
     }
 }

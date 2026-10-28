@@ -31,15 +31,24 @@ public class KafkaConsumerManager implements AutoCloseable {
 
     /** Start all topic consumers and wait until everything is ready to test. */
     public void start() {
-        for (var topic : settings.consumedTopics()) {
-            var consumer = new KafkaTopicConsumer(topic, settings.bootstrapServers(), bus);
-            consumer.start();
-            consumers.add(consumer);
+        try {
+            for (var topic : settings.consumedTopics()) {
+                var consumer = new KafkaTopicConsumer(topic, settings.bootstrapServers(), bus);
+                consumers.add(consumer);
+                consumer.start();
+            }
+            for (var consumer : consumers) {
+                consumer.awaitAssignment(settings.consumerGroupReadyTimeout());
+            }
+            groupWaiter.awaitGroupsReady(settings.requiredConsumerGroups(), settings.consumerGroupReadyTimeout());
+        } catch (RuntimeException e) {
+            // Startup failed (e.g. a consumer never got its partitions, or a required
+            // group never became ready). Spring won't call destroyMethod on a bean that
+            // failed to initialise, so stop the consumers already started to avoid
+            // leaking their daemon poll threads.
+            close();
+            throw e;
         }
-        for (var consumer : consumers) {
-            consumer.awaitAssignment(settings.consumerGroupReadyTimeout());
-        }
-        groupWaiter.awaitGroupsReady(settings.requiredConsumerGroups(), settings.consumerGroupReadyTimeout());
     }
 
     @Override

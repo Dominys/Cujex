@@ -148,19 +148,45 @@ public class ScenarioContext {
 
     private void updateRecordBuilderField(Object builder, String field, Object value) {
         try {
-            var method = getBuilderSetter(builder.getClass(), field);
-            var convertedValue = OBJECT_MAPPER.convertValue(value, method.getParameterTypes()[0]);
+            var method = getBuilderSetter(builder.getClass(), field, value);
+            // Resolve against the generic parameter type, not the erased raw type, so a
+            // setter taking e.g. List<Something> deserializes its elements correctly.
+            var targetType = OBJECT_MAPPER.getTypeFactory()
+                    .constructType(method.getGenericParameterTypes()[0]);
+            var convertedValue = OBJECT_MAPPER.convertValue(value, targetType);
             method.invoke(builder, convertedValue);
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to set field '" + field + "'", e);
         }
     }
 
-    private Method getBuilderSetter(Class<?> aClass, String name) {
-        return Stream.of(aClass.getMethods())
+    /**
+     * Finds the single-argument builder method named {@code name}. When a builder has
+     * several single-argument overloads for the same field, the one whose parameter type
+     * accepts {@code value} is chosen; a genuinely ambiguous match fails loudly rather
+     * than picking an arbitrary overload.
+     */
+    private Method getBuilderSetter(Class<?> aClass, String name, Object value) {
+        var candidates = Stream.of(aClass.getMethods())
                 .filter(f -> f.getName().equals(name))
-                .filter(f -> f.getParameterTypes().length == 1)
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Builder method '" + name + "' not found"));
+                .filter(f -> f.getParameterCount() == 1)
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new IllegalArgumentException("Builder method '" + name + "' not found");
+        }
+        if (candidates.size() == 1) {
+            return candidates.getFirst();
+        }
+        if (value != null) {
+            var assignable = candidates.stream()
+                    .filter(f -> f.getParameterTypes()[0].isAssignableFrom(value.getClass()))
+                    .toList();
+            if (assignable.size() == 1) {
+                return assignable.getFirst();
+            }
+        }
+        throw new IllegalStateException(
+                "Ambiguous builder method '" + name + "' on " + aClass.getSimpleName()
+                        + ": " + candidates.size() + " single-argument overloads match");
     }
 }

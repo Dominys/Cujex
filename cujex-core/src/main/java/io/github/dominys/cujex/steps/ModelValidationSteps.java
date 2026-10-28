@@ -14,6 +14,10 @@ import java.util.regex.Pattern;
 import static org.assertj.core.api.Assertions.assertThat;
 import static io.github.dominys.cujex.cucumber.CucConstants.CUC_REF_ID_FIELD;
 import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
+import static io.github.dominys.cujex.steps.DecompositionSupport.isBlank;
+import static io.github.dominys.cujex.steps.DecompositionSupport.requireScope;
+import static io.github.dominys.cujex.steps.DecompositionSupport.scopePath;
+import static io.github.dominys.cujex.steps.DecompositionSupport.stripBrackets;
 
 /**
  * Table-driven assertions that mirror the template <em>creation</em> grammar
@@ -168,24 +172,6 @@ public class ModelValidationSteps extends BaseSteps {
     }
 
     /**
-     * Joins a (possibly relative) collection/field name onto the active scope:
-     * a {@code .}-prefixed name nests inside the open scope, a plain name is a full
-     * root path.
-     */
-    private static String scopePath(String scope, String name, String header) {
-        return name.startsWith(".") ? requireScope(scope, header) + name : name;
-    }
-
-    private static String requireScope(String scope, String header) {
-        if (scope == null) {
-            throw new IllegalStateException(
-                    "Relative column '%s' has no open scope - precede it with a '...:' or '...[]' opener"
-                            .formatted(header));
-        }
-        return scope;
-    }
-
-    /**
      * Resolves a validation selector to a concrete {@code name[index]} scope by
      * looking into the <em>actual</em> list: {@code [n]} is the index itself and
      * {@code [field=value]} is the first element whose {@code field} matches.
@@ -290,16 +276,5 @@ public class ModelValidationSteps extends BaseSteps {
             throw new IllegalStateException(
                     "No accessor '%s()' on %s".formatted(name, target.getClass().getSimpleName()), e);
         }
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private static String stripBrackets(String cell) {
-        var trimmed = cell.trim();
-        return trimmed.startsWith("[") && trimmed.endsWith("]")
-                ? trimmed.substring(1, trimmed.length() - 1)
-                : trimmed;
     }
 }
