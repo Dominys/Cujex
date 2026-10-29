@@ -150,6 +150,29 @@ public class ScenarioContext {
         return builder;
     }
 
+    /**
+     * Clones a stored record, overwrites only the fields named in {@code fieldsRecord},
+     * and returns the rebuilt record. This is the reflective engine behind the generic
+     * "I edit {word} fields and store result in {word}" step: it works for any record
+     * exposing a {@code toBuilder()}/{@code build()} pair (e.g. a record whose builder
+     * was generated with Lombok's {@code @Builder(toBuilder = true)}), so a suite never
+     * needs a per-entity edit step.
+     *
+     * @param model        a stored entity exposing a no-arg {@code toBuilder()} method
+     * @param fieldsRecord the fields to overwrite (values already JEXL-resolved)
+     * @return a new instance with the named fields replaced
+     */
+    public Object editRecordFields(Object model, EditFieldsRecord fieldsRecord) {
+        try {
+            var builder = model.getClass().getMethod("toBuilder").invoke(model);
+            updateRecordBuilderFields(builder, fieldsRecord);
+            return builder.getClass().getMethod("build").invoke(builder);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                    "Failed to edit fields of " + model.getClass().getSimpleName(), e);
+        }
+    }
+
     private void updateRecordBuilderField(Object builder, String field, Object value) {
         try {
             var method = getBuilderSetter(builder.getClass(), field, value);

@@ -3,11 +3,13 @@ package io.github.dominys.cujex.steps;
 import io.github.dominys.cujex.context.ScenarioContext;
 import io.github.dominys.cujex.context.ScenarioContextStore;
 import io.github.dominys.cujex.context.StepVariables;
+import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 
 import io.cucumber.java.en.Given;
+import io.cucumber.java.en.When;
 
 /**
- * Generic, domain-agnostic steps for seeding the scenario context.
+ * Generic, domain-agnostic steps for seeding and manipulating the scenario context.
  */
 public class InfraSteps extends BaseSteps {
 
@@ -37,5 +39,27 @@ public class InfraSteps extends BaseSteps {
     public void defineScenarioVariables(StepVariables stepVariables) {
         stepVariables.variables().forEach(v ->
                 scenarioStore().put(v.name(), scenarioContext().resolveField(v.expression())));
+    }
+
+    /**
+     * Clones a stored entity, overrides only the columns named in the edit table, and
+     * stores the result under a new key - the domain-agnostic counterpart of a
+     * per-entity "edit" step.
+     *
+     * <pre>
+     * When I edit ${order1} fields and store result in order2
+     *   | price |
+     *   | 49.95 |
+     * </pre>
+     *
+     * The first {@code {word}} is JEXL-resolved to the stored entity; it must expose a
+     * {@code toBuilder()}/{@code build()} pair (see
+     * {@link ScenarioContext#editRecordFields}). Each table column names a builder
+     * method and its value is JEXL-resolved before being applied.
+     */
+    @When("I edit {word} fields and store result in {word}")
+    public void editFields(String recordExpr, String resultKey, EditFieldsRecord fields) {
+        var model = scenarioContext().resolveField(recordExpr);
+        scenarioStore().put(resultKey, scenarioContext().editRecordFields(model, fields));
     }
 }

@@ -1,7 +1,6 @@
 package io.github.dominys.cujex.examples.steps;
 
 import io.github.dominys.cujex.cucumber.BaseCucRecord;
-import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 import io.github.dominys.cujex.context.ScenarioContext;
 import io.github.dominys.cujex.context.ScenarioContextStore;
 import io.github.dominys.cujex.steps.BaseSteps;
@@ -66,19 +65,6 @@ public class OrderSteps extends BaseSteps {
     @When("I read order with id {stringParam} and store result in {word}")
     public void readOrder(String id, String resultKey) {
         scenarioStore().put(resultKey, orderApi.get(id));
-    }
-
-    /**
-     * Demonstrates {@link io.github.dominys.cujex.context.ScenarioContext#updateRecordBuilderFields}:
-     * take a stored order, overwrite only the columns given in the edit table, and
-     * store the result under a new key.
-     */
-    @When("I edit order {order} fields and store result in {word}")
-    public void editOrder(Order order, String resultKey, EditFieldsRecord fields) {
-        var edited = scenarioContext()
-                .updateRecordBuilderFields(order.toBuilder(), fields)
-                .build();
-        scenarioStore().put(resultKey, edited);
     }
 
     // --- assert ------------------------------------------------------------
