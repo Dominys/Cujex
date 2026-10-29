@@ -90,7 +90,8 @@ class ScenarioContextTest {
 
     @Test
     void rejectsDuplicateContributedNamespaces() {
-        assertThatThrownBy(() -> scenarioContext(new MathFns(), new MathFns()))
+        var functions = new MathFns();
+        assertThatThrownBy(() -> scenarioContext(functions, functions))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Duplicate JEXL namespace 'math'");
     }
@@ -109,17 +110,30 @@ class ScenarioContextTest {
     @Test
     void failsLoudlyForAnUnknownBuilderField() {
         var builder = new GadgetBuilder();
-
-        assertThatThrownBy(() -> scenarioContext().updateRecordBuilderFields(
-                builder, new EditFieldsRecord(Map.of("missing", "x"))))
+        var fieldsRecord = new EditFieldsRecord(Map.of("missing", "x"));
+        var context = scenarioContext();
+        assertThatThrownBy(() -> context.updateRecordBuilderFields(builder, fieldsRecord))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("missing");
+    }
+
+    @Test
+    void editsOnlyTheNamedFieldsOfAStoredRecord() {
+        var original = new Gadget("original", 1);
+
+        var edited = scenarioContext().editRecordFields(
+                original, new EditFieldsRecord(Map.of("size", 5)));
+
+        assertThat(edited).isEqualTo(new Gadget("original", 5));
     }
 
     public record Created(String id) {
     }
 
     public record Gadget(String name, int size) {
+        public GadgetBuilder toBuilder() {
+            return new GadgetBuilder().name(name).size(size);
+        }
     }
 
     public static final class GadgetBuilder {

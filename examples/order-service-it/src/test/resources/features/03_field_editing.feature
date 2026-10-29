@@ -14,7 +14,7 @@ Feature: Editing selected fields of a stored entity
 
     # Take ${order1}, override only `price`, store as `order2`.
     # (An edit table is read with a header row: first row = field names, second = values.)
-    When I edit order ${order1} fields and store result in order2
+    When I edit ${order1} fields and store result in order2
       | price |
       | 49.95 |
 
