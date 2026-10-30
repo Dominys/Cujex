@@ -25,12 +25,19 @@ jobs:
         server-username: CENTRAL_USERNAME
         server-password: CENTRAL_PASSWORD
         gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+        # Make the generated settings.xml reference the same env var the publish
+        # step exports (maven-gpg-plugin reads MAVEN_GPG_PASSPHRASE natively).
+        gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
     # Derive the release version from the tag (v1.2.3 -> 1.2.3) and stamp it across
     # the reactor. main itself is never committed back; this only affects the build.
     - name: Set release version from tag
       run: |
         VERSION="${GITHUB_REF_NAME#v}"
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::Tag '$GITHUB_REF_NAME' is not a vX.Y.Z release tag; refusing to publish."
+          exit 1
+        fi
         echo "Releasing version $VERSION"
         mvn -B versions:set -DnewVersion="$VERSION" -DprocessAllModules=true -DgenerateBackupPoms=false
 
