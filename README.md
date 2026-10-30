@@ -211,3 +211,4 @@ socket configuration is needed — see
 | **[cujex-kafka/README.md](cujex-kafka/README.md)** | The opt-in Kafka extension: what it provides, wiring, container ordering, steps, payload-agnostic transport. |
 | **[examples/README.md](examples/README.md)** | The order-service example: modules, how the test talks to the service, running details (Docker/Rancher/IDE), feature files, and gotchas. |
 | **[CHANGELOG.md](CHANGELOG.md)** | Release history and versioning policy ([Keep a Changelog](https://keepachangelog.com) + [SemVer](https://semver.org)). |
+| **[RELEASING.md](RELEASING.md)** | Maintainer release process: the SemVer bump rule, cutting a tag-driven release, and reopening `main` on the next snapshot. |
