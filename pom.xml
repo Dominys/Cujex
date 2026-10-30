@@ -86,6 +86,7 @@
         <failsafe.version>3.6.1</failsafe.version>
         <compiler.plugin.version>3.16.0</compiler.plugin.version>
         <jacoco.version>0.8.13</jacoco.version>
+        <sonar-maven.plugin.version>5.1.0.4751</sonar-maven.plugin.version>
 
         <!-- Maven Central (Central Portal) publishing. Only cujex-core and
              cujex-kafka (plus this parent POM) are published; the examples and the
@@ -101,6 +102,9 @@
              published product, so they are kept out of both analysis and coverage.
              Coverage is read from the cross-module aggregate (see cujex-coverage),
              which combines unit tests and the e2e feature runs for core + kafka. -->
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.organization>dominys</sonar.organization>
+        <sonar.projectKey>Dominys_Cujex</sonar.projectKey>
         <sonar.coverage.jacoco.xmlReportPaths>
             ${maven.multiModuleProjectDirectory}/cujex-coverage/target/site/jacoco-aggregate/jacoco.xml
         </sonar.coverage.jacoco.xmlReportPaths>
@@ -251,6 +255,11 @@
                             </goals>
                         </execution>
                     </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>${sonar-maven.plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>
