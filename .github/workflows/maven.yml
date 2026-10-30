@@ -46,12 +46,11 @@ jobs:
         restore-keys: ${{ runner.os }}-sonar
     # verify runs the full suite, including the Dockerized e2e feature tests, so the
     # cross-module JaCoCo aggregate (cujex-coverage) is produced for Sonar to read.
-    - name: Build and verify with Maven
-      run: mvn -B verify --file pom.xml
-    - name: SonarCloud analysis
-      # Skipped automatically when SONAR_TOKEN is absent (forked pull requests).
-      if: ${{ env.SONAR_TOKEN != '' }}
-      run: mvn -B sonar:sonar --file pom.xml
+    # Verification and analysis share a single reactor so test-only modules (e.g.
+    # order-service-it) resolve without a separate install. sonar.skip turns the
+    # analysis off when SONAR_TOKEN is absent (pull requests from forks).
+    - name: Build, verify and analyze with Maven
+      run: mvn -B verify sonar:sonar --file pom.xml -Dsonar.skip=${{ env.SONAR_TOKEN == '' }}
 
     # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
     - name: Update dependency graph
