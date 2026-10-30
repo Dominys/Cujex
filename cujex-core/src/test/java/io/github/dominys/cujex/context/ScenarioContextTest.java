@@ -3,6 +3,7 @@ package io.github.dominys.cujex.context;
 import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 import io.github.dominys.cujex.jexl.CujexJexlFunctions;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -153,6 +154,28 @@ class ScenarioContextTest {
         assertThat(edited.name()).isEqualTo("patched");
     }
 
+    @Test
+    void editsAWritablePropertyEvenWhenTheModelHasADerivedGetter() {
+        var original = new Labeled();
+        original.setName("original");
+
+        var edited = (Labeled) scenarioContext().editFields(
+                original, new EditFieldsRecord(Map.of("name", "patched")));
+
+        assertThat(edited.getName()).isEqualTo("patched");
+        assertThat(edited.getDisplayName()).isEqualTo("Mr. patched");
+    }
+
+    @Test
+    void failsLoudlyForAnUnknownEditFieldEvenWhenTheModelIgnoresUnknownProperties() {
+        var original = new Lenient("original");
+        var fieldsRecord = new EditFieldsRecord(Map.of("naem", "typo"));
+        var context = scenarioContext();
+        assertThatThrownBy(() -> context.editFields(original, fieldsRecord))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("naem");
+    }
+
     public record Created(String id) {
     }
 
@@ -164,6 +187,26 @@ class ScenarioContextTest {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Sparse(String name) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Lenient(String name) {
+    }
+
+    public static final class Labeled {
+        private String name;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getDisplayName() {
+            return "Mr. " + name;
+        }
     }
 
     public static final class Widget {

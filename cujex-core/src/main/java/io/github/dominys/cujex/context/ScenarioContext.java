@@ -4,8 +4,9 @@ import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 import io.github.dominys.cujex.jexl.CucJexlFunctions;
 import io.github.dominys.cujex.jexl.CujexJexlFunctions;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.BeanDescription;
+import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.apache.commons.jexl3.JexlBuilder;
@@ -16,9 +17,10 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
 
@@ -152,34 +154,64 @@ public class ScenarioContext {
      * Jackson mapping a suite already relies on to build models from tables, it works for
      * <b>any</b> model the suite can construct - plain records, mutable POJOs with
      * getters/setters, or Lombok {@code @Builder}/{@code @Jacksonized} types alike - with
-     * no {@code toBuilder()}/{@code build()} requirement. Each edit-table column names a
-     * JSON property (typically a record component or bean property); the final read runs
-     * with {@code FAIL_ON_UNKNOWN_PROPERTIES} enabled, so a genuinely unknown name fails
-     * loudly. Validation is against the type's deserializable properties (including
-     * builder-backed ones), not merely the keys serialized for this instance, so a valid
-     * but currently-omitted property - e.g. a {@code null} field dropped by
-     * {@code @JsonInclude(NON_NULL)} - can still be edited to a non-null value.
+     * no {@code toBuilder()}/{@code build()} requirement.
+     *
+     * <p>Each requested column is validated up front against the type's
+     * <em>deserializable</em> properties (see {@link #deserializableProperties}), so an
+     * unknown name fails loudly with an {@link IllegalArgumentException}. Validating the
+     * requested keys directly - rather than inferring validity from a strict read - is what
+     * makes the engine robust across model shapes:
+     * <ul>
+     *     <li>a valid property currently omitted from the serialized tree (e.g. a
+     *         {@code null} field dropped by {@code @JsonInclude(NON_NULL)}) is still
+     *         editable, because it is a deserializable property even when absent;</li>
+     *     <li>a read-only/derived getter (e.g. {@code getDisplayName()} with no setter)
+     *         that serializes but cannot be bound back is ignored on read and never
+     *         mistaken for an editable field;</li>
+     *     <li>a genuine typo is rejected regardless of the model's
+     *         {@code @JsonIgnoreProperties(ignoreUnknown = true)} policy, which would
+     *         otherwise silently swallow it during a strict read.</li>
+     * </ul>
      *
      * @param model        a stored entity (any Jackson-serializable type)
      * @param fieldsRecord the fields to overwrite (values already JEXL-resolved)
      * @return a new instance with the named fields replaced
      */
     public Object editFields(Object model, EditFieldsRecord fieldsRecord) {
+        var type = model.getClass();
         if (!(OBJECT_MAPPER.valueToTree(model) instanceof ObjectNode node)) {
-            throw new IllegalArgumentException(model.getClass().getSimpleName()
+            throw new IllegalArgumentException(type.getSimpleName()
                     + " does not serialize to a JSON object and cannot be edited");
         }
-        fieldsRecord.fields().forEach((field, value) -> node.set(field, OBJECT_MAPPER.valueToTree(value)));
+        var editable = deserializableProperties(type);
+        fieldsRecord.fields().forEach((field, value) -> {
+            if (!editable.contains(field)) {
+                throw new IllegalArgumentException(
+                        "Field '" + field + "' not found on " + type.getSimpleName());
+            }
+            node.set(field, OBJECT_MAPPER.valueToTree(value));
+        });
         try {
-            return OBJECT_MAPPER.readerFor(model.getClass())
-                    .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                    .readValue(node);
-        } catch (UnrecognizedPropertyException e) {
-            throw new IllegalArgumentException(
-                    "Field '" + e.getPropertyName() + "' not found on " + model.getClass().getSimpleName(), e);
-        } catch (IOException e) {
+            return OBJECT_MAPPER.treeToValue(node, type);
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException(
-                    "Failed to edit fields of " + model.getClass().getSimpleName(), e);
+                    "Failed to edit fields of " + type.getSimpleName(), e);
         }
+    }
+
+    /**
+     * The names of the properties Jackson can <em>deserialize</em> (write back) for
+     * {@code type}: setter-, field- and constructor/creator-bound properties, including
+     * the builder-backed properties of a {@code @Jacksonized} type. Read-only getters are
+     * excluded, and the set is derived purely from the type's property model, so it is
+     * independent of any {@code @JsonIgnoreProperties(ignoreUnknown = true)} policy.
+     */
+    private static Set<String> deserializableProperties(Class<?> type) {
+        BeanDescription description =
+                OBJECT_MAPPER.getDeserializationConfig().introspect(OBJECT_MAPPER.constructType(type));
+        return description.findProperties().stream()
+                .filter(BeanPropertyDefinition::couldDeserialize)
+                .map(BeanPropertyDefinition::getName)
+                .collect(Collectors.toSet());
     }
 }
