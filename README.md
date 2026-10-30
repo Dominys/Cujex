@@ -1,5 +1,7 @@
 # Cujex
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.dominys/cujex-core?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.dominys/cujex-core)
+
 **Cujex** (**Cu**cumber + **Jex**l) is a small, reusable framework for writing
 **e2e / service-level tests** with Cucumber. It adds a JEXL expression layer, a
 per-scenario memory store, and a JSON-template engine on top of plain Cucumber, so
