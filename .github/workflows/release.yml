@@ -1,0 +1,52 @@
+# Publishes a signed release to Maven Central (Central Portal) when a vX.Y.Z tag
+# is pushed. main stays on -SNAPSHOT; the tag name is the released version.
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+jobs:
+  release:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6.1.0
+    - name: Set up JDK 21
+      uses: actions/setup-java@v6.1.0
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        # settings.xml server "central" for publishing credentials, plus the GPG
+        # key used by maven-gpg-plugin to sign the release artifacts.
+        server-id: central
+        server-username: CENTRAL_USERNAME
+        server-password: CENTRAL_PASSWORD
+        gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+        # Make the generated settings.xml reference the same env var the publish
+        # step exports (maven-gpg-plugin reads MAVEN_GPG_PASSPHRASE natively).
+        gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+    # Derive the release version from the tag (v1.2.3 -> 1.2.3) and stamp it across
+    # the reactor. main itself is never committed back; this only affects the build.
+    - name: Set release version from tag
+      run: |
+        VERSION="${GITHUB_REF_NAME#v}"
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::Tag '$GITHUB_REF_NAME' is not a vX.Y.Z release tag; refusing to publish."
+          exit 1
+        fi
+        echo "Releasing version $VERSION"
+        mvn -B versions:set -DnewVersion="$VERSION" -DprocessAllModules=true -DgenerateBackupPoms=false
+
+    # Builds, signs and publishes only the library (cujex-core + cujex-kafka, with
+    # the parent POM pulled in by -am). autoPublish=true promotes the deployment
+    # automatically once Central validation passes.
+    - name: Publish release
+      env:
+        CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+        CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      run: mvn -B -Prelease deploy -pl :cujex-core,:cujex-kafka -am

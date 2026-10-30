@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+         child.project.url.inherit.append.path="false">
     <modelVersion>4.0.0</modelVersion>
 
     <!-- Published as io.github.dominys per the Maven Central convention for
          projects hosted at github.com/Dominys (no custom domain required). -->
     <groupId>io.github.dominys</groupId>
     <artifactId>cujex-parent</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Cujex (parent)</name>
@@ -16,6 +17,34 @@
         Example of service-level / e2e testing with Cucumber + JEXL, split into a
         deployable Spring Boot service and a test module that talks to it over REST.
     </description>
+    <url>https://github.com/Dominys/Cujex</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://github.com/Dominys/Cujex/blob/main/LICENSE</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>Dominys</id>
+            <name>Roman Bezpalko</name>
+            <url>https://github.com/Dominys</url>
+        </developer>
+    </developers>
+
+    <!-- Children inherit this SCM verbatim; don't append each module path,
+         which would yield non-cloneable URLs like .../Cujex.git/cujex-core. -->
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
+        <connection>scm:git:https://github.com/Dominys/Cujex.git</connection>
+        <developerConnection>scm:git:git@github.com:Dominys/Cujex.git</developerConnection>
+        <url>https://github.com/Dominys/Cujex</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <modules>
         <!-- The reusable Cucumber + JEXL framework (Cujex). Published library,
@@ -57,6 +86,16 @@
         <failsafe.version>3.6.1</failsafe.version>
         <compiler.plugin.version>3.16.0</compiler.plugin.version>
         <jacoco.version>0.8.13</jacoco.version>
+
+        <!-- Maven Central (Central Portal) publishing. Only cujex-core and
+             cujex-kafka (plus this parent POM) are published; the examples and the
+             coverage module flip cujex.publish.skip to true so the central plugin
+             skips them. -->
+        <central-publishing.plugin.version>0.9.0</central-publishing.plugin.version>
+        <maven-source.plugin.version>3.3.1</maven-source.plugin.version>
+        <maven-javadoc.plugin.version>3.11.2</maven-javadoc.plugin.version>
+        <maven-gpg.plugin.version>3.2.8</maven-gpg.plugin.version>
+        <cujex.publish.skip>false</cujex.publish.skip>
 
         <!-- Sonar: the example modules are sample consumers, not part of the
              published product, so they are kept out of both analysis and coverage.
@@ -215,6 +254,94 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <plugins>
+            <!-- Active for the whole reactor (extensions=true replaces the default
+                 deploy): routes `mvn deploy` to the Central Portal. Releases are
+                 auto-published after validation; -SNAPSHOT versions go to the Central
+                 snapshot repository. Modules that must not be published set
+                 cujex.publish.skip=true. -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>${central-publishing.plugin.version}</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>true</autoPublish>
+                    <skipPublishing>${cujex.publish.skip}</skipPublishing>
+                </configuration>
+            </plugin>
+        </plugins>
     </build>
+
+    <profiles>
+        <!-- Enabled only when cutting a release (the release workflow runs
+             `mvn -Prelease deploy`). Central requires every released artifact to
+             ship signed -sources and -javadoc jars; these are kept out of normal
+             CI/snapshot builds so they stay fast. -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>${maven-source.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven-javadoc.plugin.version}</version>
+                        <configuration>
+                            <!-- Relaxed so missing/strict Javadoc never fails a
+                                 release; the jar is a Central requirement, not a
+                                 documentation gate. -->
+                            <doclint>none</doclint>
+                            <failOnError>false</failOnError>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <!-- Non-interactive signing in CI (passphrase comes from
+                                 the MAVEN_GPG_PASSPHRASE env var). -->
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
