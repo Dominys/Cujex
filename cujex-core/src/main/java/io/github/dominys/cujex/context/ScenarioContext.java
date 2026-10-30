@@ -4,7 +4,8 @@ import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 import io.github.dominys.cujex.jexl.CucJexlFunctions;
 import io.github.dominys.cujex.jexl.CujexJexlFunctions;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.apache.commons.jexl3.JexlBuilder;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.regex.Pattern;
 
@@ -151,8 +153,12 @@ public class ScenarioContext {
      * <b>any</b> model the suite can construct - plain records, mutable POJOs with
      * getters/setters, or Lombok {@code @Builder}/{@code @Jacksonized} types alike - with
      * no {@code toBuilder()}/{@code build()} requirement. Each edit-table column names a
-     * JSON property (typically a record component or bean property); an unknown name fails
-     * loudly rather than being silently ignored.
+     * JSON property (typically a record component or bean property); the final read runs
+     * with {@code FAIL_ON_UNKNOWN_PROPERTIES} enabled, so a genuinely unknown name fails
+     * loudly. Validation is against the type's deserializable properties (including
+     * builder-backed ones), not merely the keys serialized for this instance, so a valid
+     * but currently-omitted property - e.g. a {@code null} field dropped by
+     * {@code @JsonInclude(NON_NULL)} - can still be edited to a non-null value.
      *
      * @param model        a stored entity (any Jackson-serializable type)
      * @param fieldsRecord the fields to overwrite (values already JEXL-resolved)
@@ -163,16 +169,15 @@ public class ScenarioContext {
             throw new IllegalArgumentException(model.getClass().getSimpleName()
                     + " does not serialize to a JSON object and cannot be edited");
         }
-        fieldsRecord.fields().forEach((field, value) -> {
-            if (!node.has(field)) {
-                throw new IllegalArgumentException(
-                        "Field '" + field + "' not found on " + model.getClass().getSimpleName());
-            }
-            node.set(field, OBJECT_MAPPER.valueToTree(value));
-        });
+        fieldsRecord.fields().forEach((field, value) -> node.set(field, OBJECT_MAPPER.valueToTree(value)));
         try {
-            return OBJECT_MAPPER.treeToValue(node, model.getClass());
-        } catch (JsonProcessingException e) {
+            return OBJECT_MAPPER.readerFor(model.getClass())
+                    .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(node);
+        } catch (UnrecognizedPropertyException e) {
+            throw new IllegalArgumentException(
+                    "Field '" + e.getPropertyName() + "' not found on " + model.getClass().getSimpleName(), e);
+        } catch (IOException e) {
             throw new IllegalStateException(
                     "Failed to edit fields of " + model.getClass().getSimpleName(), e);
         }

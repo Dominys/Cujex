@@ -2,6 +2,8 @@ package io.github.dominys.cujex.context;
 
 import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 import io.github.dominys.cujex.jexl.CujexJexlFunctions;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
@@ -129,10 +131,39 @@ class ScenarioContextTest {
                 .hasMessageContaining("missing");
     }
 
+    @Test
+    void leavesAnUntouchedInstantExactlyIntactWhenEditingAnotherField() {
+        var createdAt = Instant.parse("2026-10-30T09:08:07.123456789Z");
+        var original = new Dated(1, createdAt);
+
+        var edited = (Dated) scenarioContext().editFields(
+                original, new EditFieldsRecord(Map.of("size", 5)));
+
+        assertThat(edited.size()).isEqualTo(5);
+        assertThat(edited.createdAt()).isEqualTo(createdAt);
+    }
+
+    @Test
+    void editsAValidPropertyThatWasOmittedBecauseItWasNull() {
+        var original = new Sparse(null);
+
+        var edited = (Sparse) scenarioContext().editFields(
+                original, new EditFieldsRecord(Map.of("name", "patched")));
+
+        assertThat(edited.name()).isEqualTo("patched");
+    }
+
     public record Created(String id) {
     }
 
     public record Gadget(String name, int size) {
+    }
+
+    public record Dated(int size, Instant createdAt) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Sparse(String name) {
     }
 
     public static final class Widget {
