@@ -11,6 +11,10 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    # Needed so the workflow can create the GitHub Release for the tag.
+    permissions:
+      contents: write
+
     steps:
     - uses: actions/checkout@v6.1.0
     - name: Set up JDK 21
@@ -50,3 +54,23 @@ jobs:
         CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
         MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       run: mvn -B -Prelease deploy -pl :cujex-core,:cujex-kafka -am
+
+    # Publish a GitHub Release for the tag, using the matching CHANGELOG section
+    # as the notes so the release page and the changelog never drift apart.
+    - name: Create GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        VERSION="${GITHUB_REF_NAME#v}"
+        awk -v ver="$VERSION" '
+          $0 ~ ("^## \\[" ver "\\]") {flag=1; next}
+          flag && (/^## \[/ || /^\[.+\]:/) {flag=0}
+          flag {print}
+        ' CHANGELOG.md > release-notes.md
+        if [ ! -s release-notes.md ]; then
+          echo "No CHANGELOG section for $VERSION; using a placeholder."
+          printf 'Release %s.\n' "$VERSION" > release-notes.md
+        fi
+        gh release create "$GITHUB_REF_NAME" \
+          --title "$GITHUB_REF_NAME" \
+          --notes-file release-notes.md

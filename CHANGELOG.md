@@ -12,6 +12,8 @@ published and are exempt from compatibility guarantees.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-30
+
 ### Added
 
 - **`cujex-core`** — domain-agnostic Cucumber + JEXL test infrastructure:
@@ -28,4 +30,5 @@ published and are exempt from compatibility guarantees.
 - Maven Central publishing via tag-driven releases: pushing a `vX.Y.Z` tag
   signs and publishes `cujex-core` + `cujex-kafka` to the Central Portal.
 
-[Unreleased]: https://github.com/Dominys/Cujex/commits/main
+[Unreleased]: https://github.com/Dominys/Cujex/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Dominys/Cujex/releases/tag/v1.0.0
