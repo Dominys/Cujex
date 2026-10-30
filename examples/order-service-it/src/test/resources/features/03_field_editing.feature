@@ -1,8 +1,9 @@
 # Use case 3: field-level editing of a stored entity.
 #
 # Sometimes you want "the same order as before, but with these two fields changed".
-# updateRecordBuilderFields does exactly that: it reflectively calls the builder
-# method whose name equals each column, using the JEXL-resolved value.
+# The edit step does exactly that: it round-trips the stored entity through JSON,
+# overwriting only the named columns with their JEXL-resolved values. It works for any
+# Jackson-mappable model (plain record, POJO, or Lombok @Builder type).
 @Editing
 Feature: Editing selected fields of a stored entity
 

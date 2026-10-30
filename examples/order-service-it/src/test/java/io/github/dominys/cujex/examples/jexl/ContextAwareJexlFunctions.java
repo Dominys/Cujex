@@ -2,6 +2,7 @@ package io.github.dominys.cujex.examples.jexl;
 
 import io.github.dominys.cujex.context.CujexJexlContext;
 import io.github.dominys.cujex.jexl.CujexJexlFunctions;
+import java.util.Objects;
 
 /**
  * Use case 3: a <b>context-aware</b> function that reads the scenario context.
@@ -57,6 +58,7 @@ public class ContextAwareJexlFunctions implements CujexJexlFunctions {
      * {@code ScenarioContext} from inside a function.
      */
     public Object ref(String expression) {
-        return context.scenarioContext().resolveField("${" + expression + "}");
+        return Objects.requireNonNull(context, "ref(...) must run on a JEXL functor with an injected context")
+                .scenarioContext().resolveField("${" + expression + "}");
     }
 }
