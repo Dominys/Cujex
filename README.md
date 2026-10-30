@@ -210,3 +210,4 @@ socket configuration is needed — see
 | └ [docs/extending.md](cujex-core/docs/extending.md) | Wiring a suite, domain types, steps, JEXL functions, endpoints |
 | **[cujex-kafka/README.md](cujex-kafka/README.md)** | The opt-in Kafka extension: what it provides, wiring, container ordering, steps, payload-agnostic transport. |
 | **[examples/README.md](examples/README.md)** | The order-service example: modules, how the test talks to the service, running details (Docker/Rancher/IDE), feature files, and gotchas. |
+| **[CHANGELOG.md](CHANGELOG.md)** | Release history and versioning policy ([Keep a Changelog](https://keepachangelog.com) + [SemVer](https://semver.org)). |
