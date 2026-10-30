@@ -6,8 +6,10 @@ import io.github.dominys.cujex.jexl.CujexJexlFunctions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.BeanDescription;
-import com.fasterxml.jackson.databind.introspect.BeanPropertyDefinition;
+import com.fasterxml.jackson.databind.DeserializationConfig;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.util.NameTransformer;
 
 import org.apache.commons.jexl3.JexlBuilder;
 import org.apache.commons.jexl3.JexlEngine;
@@ -18,9 +20,9 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
 
@@ -200,18 +202,58 @@ public class ScenarioContext {
     }
 
     /**
-     * The names of the properties Jackson can <em>deserialize</em> (write back) for
-     * {@code type}: setter-, field- and constructor/creator-bound properties, including
-     * the builder-backed properties of a {@code @Jacksonized} type. Read-only getters are
-     * excluded, and the set is derived purely from the type's property model, so it is
-     * independent of any {@code @JsonIgnoreProperties(ignoreUnknown = true)} policy.
+     * The JSON property names Jackson can <em>deserialize</em> (bind back) for {@code type}.
+     * This mirrors what a round-trip read will actually accept, so it is the authoritative
+     * set an edit column must belong to:
+     * <ul>
+     *     <li>setter-, field- and constructor/creator-bound properties (covers plain
+     *         records and mutable POJOs);</li>
+     *     <li>properties writable only through a configured builder - introspected via the
+     *         builder, so a {@code @JsonDeserialize(builder = ...)} / {@code @Jacksonized}
+     *         type whose value class exposes no mutators is still handled;</li>
+     *     <li>the flattened JSON fields of a {@code @JsonUnwrapped} property (respecting any
+     *         prefix/suffix), rather than the wrapper property name.</li>
+     * </ul>
+     * Read-only/derived getters are excluded, and the set is derived purely from the type's
+     * property model, so it is independent of any
+     * {@code @JsonIgnoreProperties(ignoreUnknown = true)} policy.
      */
     private static Set<String> deserializableProperties(Class<?> type) {
-        BeanDescription description =
-                OBJECT_MAPPER.getDeserializationConfig().introspect(OBJECT_MAPPER.constructType(type));
-        return description.findProperties().stream()
-                .filter(BeanPropertyDefinition::couldDeserialize)
-                .map(BeanPropertyDefinition::getName)
-                .collect(Collectors.toSet());
+        var config = OBJECT_MAPPER.getDeserializationConfig();
+        var names = new HashSet<String>();
+        collectDeserializableNames(config, introspectForDeserialization(config, OBJECT_MAPPER.constructType(type)),
+                NameTransformer.NOP, names);
+        return names;
+    }
+
+    private static void collectDeserializableNames(DeserializationConfig config, BeanDescription description,
+                                                   NameTransformer transform, Set<String> names) {
+        var introspector = config.getAnnotationIntrospector();
+        for (var property : description.findProperties()) {
+            if (!property.couldDeserialize()) {
+                continue;
+            }
+            var member = property.getPrimaryMember();
+            var unwrapper = member == null ? null : introspector.findUnwrappingNameTransformer(member);
+            if (unwrapper == null) {
+                names.add(transform.transform(property.getName()));
+            } else {
+                var nested = introspectForDeserialization(config, property.getPrimaryType());
+                collectDeserializableNames(config, nested, NameTransformer.chainedTransformer(transform, unwrapper),
+                        names);
+            }
+        }
+    }
+
+    /**
+     * Introspects {@code type} for deserialization, switching to the configured builder's
+     * property model when the type is deserialized through a builder.
+     */
+    private static BeanDescription introspectForDeserialization(DeserializationConfig config, JavaType type) {
+        var description = config.introspect(type);
+        var builder = config.getAnnotationIntrospector().findPOJOBuilder(description.getClassInfo());
+        return builder == null
+                ? description
+                : config.introspectForBuilder(OBJECT_MAPPER.constructType(builder), description);
     }
 }

@@ -5,6 +5,9 @@ import io.github.dominys.cujex.jexl.CujexJexlFunctions;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
@@ -176,6 +179,29 @@ class ScenarioContextTest {
                 .hasMessageContaining("naem");
     }
 
+    @Test
+    void editsAPropertyWritableOnlyThroughAConfiguredBuilder() {
+        var original = Boxed.builder().name("original").size(1).build();
+
+        var edited = (Boxed) scenarioContext().editFields(
+                original, new EditFieldsRecord(Map.of("size", 5)));
+
+        assertThat(edited.getName()).isEqualTo("original");
+        assertThat(edited.getSize()).isEqualTo(5);
+    }
+
+    @Test
+    void editsAFlattenedFieldOfAnUnwrappedProperty() {
+        var original = new Person("p1", new Address("Lviv", "Shevchenka"));
+
+        var edited = (Person) scenarioContext().editFields(
+                original, new EditFieldsRecord(Map.of("city", "Kyiv")));
+
+        assertThat(edited.getId()).isEqualTo("p1");
+        assertThat(edited.getAddress().city()).isEqualTo("Kyiv");
+        assertThat(edited.getAddress().street()).isEqualTo("Shevchenka");
+    }
+
     public record Created(String id) {
     }
 
@@ -191,6 +217,83 @@ class ScenarioContextTest {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Lenient(String name) {
+    }
+
+    @JsonDeserialize(builder = Boxed.Builder.class)
+    public static final class Boxed {
+        private final String name;
+        private final int size;
+
+        private Boxed(String name, int size) {
+            this.name = name;
+            this.size = size;
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public int getSize() {
+            return size;
+        }
+
+        @JsonPOJOBuilder(withPrefix = "")
+        public static final class Builder {
+            private String name;
+            private int size;
+
+            public Builder name(String name) {
+                this.name = name;
+                return this;
+            }
+
+            public Builder size(int size) {
+                this.size = size;
+                return this;
+            }
+
+            public Boxed build() {
+                return new Boxed(name, size);
+            }
+        }
+    }
+
+    public record Address(String city, String street) {
+    }
+
+    public static final class Person {
+        private String id;
+        private Address address;
+
+        public Person() {
+        }
+
+        public Person(String id, Address address) {
+            this.id = id;
+            this.address = address;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        @JsonUnwrapped
+        public Address getAddress() {
+            return address;
+        }
+
+        @JsonUnwrapped
+        public void setAddress(Address address) {
+            this.address = address;
+        }
     }
 
     public static final class Labeled {
