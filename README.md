@@ -1,6 +1,8 @@
 # Cujex
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.dominys/cujex-core?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.dominys/cujex-core)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Dominys_Cujex&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Dominys_Cujex)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Dominys_Cujex&metric=coverage)](https://sonarcloud.io/component_measures?id=Dominys_Cujex&metric=coverage)
 
 **Cujex** (**Cu**cumber + **Jex**l) is a small, reusable framework for writing
 **e2e / service-level tests** with Cucumber. It adds a JEXL expression layer, a
