@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.dominys</groupId>
         <artifactId>cujex-parent</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>cujex-coverage</artifactId>
@@ -26,6 +26,8 @@
     <properties>
         <maven.install.skip>true</maven.install.skip>
         <maven.deploy.skip>true</maven.deploy.skip>
+        <!-- Reporting-only module: produces no publishable artifact. -->
+        <cujex.publish.skip>true</cujex.publish.skip>
     </properties>
 
     <dependencies>
