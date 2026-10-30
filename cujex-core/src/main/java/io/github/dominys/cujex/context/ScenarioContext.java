@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -178,8 +179,12 @@ public class ScenarioContext {
      * @param model        a stored entity (any Jackson-serializable type)
      * @param fieldsRecord the fields to overwrite (values already JEXL-resolved)
      * @return a new instance with the named fields replaced
+     * @throws NullPointerException if {@code model} is {@code null} (e.g. the entity
+     *                              expression resolved to nothing stored under that key)
      */
     public Object editFields(Object model, EditFieldsRecord fieldsRecord) {
+        Objects.requireNonNull(model,
+                "Cannot edit fields: the entity expression resolved to null (nothing stored under that key?)");
         var type = model.getClass();
         if (!(OBJECT_MAPPER.valueToTree(model) instanceof ObjectNode node)) {
             throw new IllegalArgumentException(type.getSimpleName()

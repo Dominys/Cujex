@@ -136,6 +136,15 @@ class ScenarioContextTest {
     }
 
     @Test
+    void failsLoudlyWhenEditingANullModel() {
+        var fieldsRecord = new EditFieldsRecord(Map.of("size", 5));
+        var context = scenarioContext();
+        assertThatThrownBy(() -> context.editFields(null, fieldsRecord))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("resolved to null");
+    }
+
+    @Test
     void leavesAnUntouchedInstantExactlyIntactWhenEditingAnotherField() {
         var createdAt = Instant.parse("2026-10-30T09:08:07.123456789Z");
         var original = new Dated(1, createdAt);
