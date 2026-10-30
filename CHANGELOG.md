@@ -12,6 +12,14 @@ published and are exempt from compatibility guarantees.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-30
+
+### Fixed
+
+- `ScenarioContext.editFields` now fails with a clear message when the target
+  entity expression resolves to `null` (e.g. nothing is stored under that key),
+  instead of throwing a bare `NullPointerException`.
+
 ## [1.0.0] - 2026-10-30
 
 ### Added
@@ -30,5 +38,6 @@ published and are exempt from compatibility guarantees.
 - Maven Central publishing via tag-driven releases: pushing a `vX.Y.Z` tag
   signs and publishes `cujex-core` + `cujex-kafka` to the Central Portal.
 
-[Unreleased]: https://github.com/Dominys/Cujex/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Dominys/Cujex/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Dominys/Cujex/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Dominys/Cujex/releases/tag/v1.0.0
