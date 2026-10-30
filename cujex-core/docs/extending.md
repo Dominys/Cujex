@@ -64,9 +64,12 @@ public class OrderTypes {
 }
 ```
 
-For field editing (`EditFieldsRecord` / the edit steps) to work, the DTO needs a builder
-whose setter method names equal the field names. The api model records get this for free
-from Lombok `@Builder(toBuilder = true)` + `@Jacksonized` (see `Order`/`Customer`).
+For field editing (`EditFieldsRecord` / the edit steps) to work, the DTO only needs to
+be serializable and deserializable by the shared Jackson `OBJECT_MAPPER` — the edit engine
+round-trips the entity through JSON (serialize → overwrite named properties → deserialize),
+so plain records, mutable POJOs, and Lombok `@Builder`/`@Jacksonized` types all work with
+no `toBuilder()` requirement. The api model records are Jackson-mapped via Lombok
+`@Jacksonized` (see `Order`/`Customer`).
 
 ## Add a domain step
 
@@ -130,7 +133,8 @@ public class ContextAwareJexlFunctions implements CujexJexlFunctions {
     public String namespace() { return "ctx"; }
     public Object functions() { return ContextAwareJexlFunctions.class; }    // a Class -> context injected
     public Object ref(String expr) {
-        return context.scenarioContext().resolveField("${" + expr + "}");
+        return Objects.requireNonNull(context, "needs an injected context")
+                .scenarioContext().resolveField("${" + expr + "}");
     }
 }
 ```

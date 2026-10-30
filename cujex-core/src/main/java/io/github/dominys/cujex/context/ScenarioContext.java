@@ -4,6 +4,9 @@ import io.github.dominys.cujex.cucumber.EditFieldsRecord;
 import io.github.dominys.cujex.jexl.CucJexlFunctions;
 import io.github.dominys.cujex.jexl.CujexJexlFunctions;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
 import org.apache.commons.jexl3.JexlBuilder;
 import org.apache.commons.jexl3.JexlEngine;
 import org.apache.commons.jexl3.JexlFeatures;
@@ -12,10 +15,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
 
@@ -28,8 +29,8 @@ import static io.github.dominys.cujex.cucumber.ParameterTypes.OBJECT_MAPPER;
  *         Java object. If the value matches <code>${ ... }</code> it is treated as
  *         a JEXL expression and evaluated against the current
  *         {@link ScenarioContextStore}; otherwise it is returned unchanged.</li>
- *     <li><b>{@link #updateRecordBuilderFields}</b> - patches selected fields of an
- *         entity's builder reflectively, enabling "edit only these columns" steps.</li>
+ *     <li><b>{@link #editFields}</b> - rebuilds a stored entity with selected fields
+ *         overwritten, enabling "edit only these columns" steps for any model.</li>
  * </ol>
  *
  * <h2>How {@code ${...}} resolution works</h2>
@@ -138,82 +139,42 @@ public class ScenarioContext {
     }
 
     /**
-     * Applies each field in {@code fieldsRecord} to {@code builder} by invoking the
-     * builder method whose name equals the field name.
+     * Clones a stored entity, overwrites only the fields named in {@code fieldsRecord},
+     * and returns the rebuilt entity. This is the model-agnostic engine behind the generic
+     * "I edit {word} fields and store result in {word}" step, so a suite never needs a
+     * per-entity edit step.
      *
-     * @param builder      a builder instance (e.g. {@code order.toBuilder()})
-     * @param fieldsRecord the fields to overwrite (values already JEXL-resolved)
-     * @return the same builder, for chaining a {@code build()} call
-     */
-    public <T> T updateRecordBuilderFields(T builder, EditFieldsRecord fieldsRecord) {
-        fieldsRecord.fields().forEach((key, value) -> updateRecordBuilderField(builder, key, value));
-        return builder;
-    }
-
-    /**
-     * Clones a stored record, overwrites only the fields named in {@code fieldsRecord},
-     * and returns the rebuilt record. This is the reflective engine behind the generic
-     * "I edit {word} fields and store result in {word}" step: it works for any record
-     * exposing a {@code toBuilder()}/{@code build()} pair (e.g. a record whose builder
-     * was generated with Lombok's {@code @Builder(toBuilder = true)}), so a suite never
-     * needs a per-entity edit step.
+     * <p>Editing is a JSON round-trip through the shared {@code OBJECT_MAPPER}: the entity
+     * is serialized to a JSON tree, the named fields are overwritten in that tree, and the
+     * tree is deserialized back into the original type. Because it reuses the very same
+     * Jackson mapping a suite already relies on to build models from tables, it works for
+     * <b>any</b> model the suite can construct - plain records, mutable POJOs with
+     * getters/setters, or Lombok {@code @Builder}/{@code @Jacksonized} types alike - with
+     * no {@code toBuilder()}/{@code build()} requirement. Each edit-table column names a
+     * JSON property (typically a record component or bean property); an unknown name fails
+     * loudly rather than being silently ignored.
      *
-     * @param model        a stored entity exposing a no-arg {@code toBuilder()} method
+     * @param model        a stored entity (any Jackson-serializable type)
      * @param fieldsRecord the fields to overwrite (values already JEXL-resolved)
      * @return a new instance with the named fields replaced
      */
-    public Object editRecordFields(Object model, EditFieldsRecord fieldsRecord) {
+    public Object editFields(Object model, EditFieldsRecord fieldsRecord) {
+        if (!(OBJECT_MAPPER.valueToTree(model) instanceof ObjectNode node)) {
+            throw new IllegalArgumentException(model.getClass().getSimpleName()
+                    + " does not serialize to a JSON object and cannot be edited");
+        }
+        fieldsRecord.fields().forEach((field, value) -> {
+            if (!node.has(field)) {
+                throw new IllegalArgumentException(
+                        "Field '" + field + "' not found on " + model.getClass().getSimpleName());
+            }
+            node.set(field, OBJECT_MAPPER.valueToTree(value));
+        });
         try {
-            var builder = model.getClass().getMethod("toBuilder").invoke(model);
-            updateRecordBuilderFields(builder, fieldsRecord);
-            return builder.getClass().getMethod("build").invoke(builder);
-        } catch (ReflectiveOperationException e) {
+            return OBJECT_MAPPER.treeToValue(node, model.getClass());
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException(
                     "Failed to edit fields of " + model.getClass().getSimpleName(), e);
         }
-    }
-
-    private void updateRecordBuilderField(Object builder, String field, Object value) {
-        try {
-            var method = getBuilderSetter(builder.getClass(), field, value);
-            // Resolve against the generic parameter type, not the erased raw type, so a
-            // setter taking e.g. List<Something> deserializes its elements correctly.
-            var targetType = OBJECT_MAPPER.getTypeFactory()
-                    .constructType(method.getGenericParameterTypes()[0]);
-            var convertedValue = OBJECT_MAPPER.convertValue(value, targetType);
-            method.invoke(builder, convertedValue);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to set field '" + field + "'", e);
-        }
-    }
-
-    /**
-     * Finds the single-argument builder method named {@code name}. When a builder has
-     * several single-argument overloads for the same field, the one whose parameter type
-     * accepts {@code value} is chosen; a genuinely ambiguous match fails loudly rather
-     * than picking an arbitrary overload.
-     */
-    private Method getBuilderSetter(Class<?> aClass, String name, Object value) {
-        var candidates = Stream.of(aClass.getMethods())
-                .filter(f -> f.getName().equals(name))
-                .filter(f -> f.getParameterCount() == 1)
-                .toList();
-        if (candidates.isEmpty()) {
-            throw new IllegalArgumentException("Builder method '" + name + "' not found");
-        }
-        if (candidates.size() == 1) {
-            return candidates.getFirst();
-        }
-        if (value != null) {
-            var assignable = candidates.stream()
-                    .filter(f -> f.getParameterTypes()[0].isAssignableFrom(value.getClass()))
-                    .toList();
-            if (assignable.size() == 1) {
-                return assignable.getFirst();
-            }
-        }
-        throw new IllegalStateException(
-                "Ambiguous builder method '" + name + "' on " + aClass.getSimpleName()
-                        + ": " + candidates.size() + " single-argument overloads match");
     }
 }

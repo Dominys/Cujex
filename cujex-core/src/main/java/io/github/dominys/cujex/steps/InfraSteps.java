@@ -52,14 +52,15 @@ public class InfraSteps extends BaseSteps {
      *   | 49.95 |
      * </pre>
      *
-     * The first {@code {word}} is JEXL-resolved to the stored entity; it must expose a
-     * {@code toBuilder()}/{@code build()} pair (see
-     * {@link ScenarioContext#editRecordFields}). Each table column names a builder
-     * method and its value is JEXL-resolved before being applied.
+     * The first {@code {word}} is JEXL-resolved to the stored entity; it can be any
+     * Jackson-serializable model - a plain record, a mutable POJO, or a Lombok
+     * {@code @Builder}/{@code @Jacksonized} type (see
+     * {@link ScenarioContext#editFields}). Each table column names a JSON property and
+     * its value is JEXL-resolved before being applied.
      */
     @When("I edit {word} fields and store result in {word}")
     public void editFields(String recordExpr, String resultKey, EditFieldsRecord fields) {
         var model = scenarioContext().resolveField(recordExpr);
-        scenarioStore().put(resultKey, scenarioContext().editRecordFields(model, fields));
+        scenarioStore().put(resultKey, scenarioContext().editFields(model, fields));
     }
 }

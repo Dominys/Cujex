@@ -97,61 +97,62 @@ class ScenarioContextTest {
     }
 
     @Test
-    void patchesOnlyTheNamedBuilderFields() {
-        var builder = new GadgetBuilder().name("original").size(1);
-
-        var returned = scenarioContext().updateRecordBuilderFields(
-                builder, new EditFieldsRecord(Map.of("name", "patched", "size", 5)));
-
-        assertThat(returned).isSameAs(builder);
-        assertThat(builder.build()).isEqualTo(new Gadget("patched", 5));
-    }
-
-    @Test
-    void failsLoudlyForAnUnknownBuilderField() {
-        var builder = new GadgetBuilder();
-        var fieldsRecord = new EditFieldsRecord(Map.of("missing", "x"));
-        var context = scenarioContext();
-        assertThatThrownBy(() -> context.updateRecordBuilderFields(builder, fieldsRecord))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("missing");
-    }
-
-    @Test
-    void editsOnlyTheNamedFieldsOfAStoredRecord() {
+    void editsOnlyTheNamedFieldsOfAPlainRecord() {
         var original = new Gadget("original", 1);
 
-        var edited = scenarioContext().editRecordFields(
+        var edited = scenarioContext().editFields(
                 original, new EditFieldsRecord(Map.of("size", 5)));
 
         assertThat(edited).isEqualTo(new Gadget("original", 5));
+    }
+
+    @Test
+    void editsOnlyTheNamedFieldsOfAPojo() {
+        var original = new Widget();
+        original.setName("original");
+        original.setSize(1);
+
+        var edited = (Widget) scenarioContext().editFields(
+                original, new EditFieldsRecord(Map.of("name", "patched")));
+
+        assertThat(edited.getName()).isEqualTo("patched");
+        assertThat(edited.getSize()).isEqualTo(1);
+    }
+
+    @Test
+    void failsLoudlyForAnUnknownEditField() {
+        var original = new Gadget("original", 1);
+        var fieldsRecord = new EditFieldsRecord(Map.of("missing", "x"));
+        var context = scenarioContext();
+        assertThatThrownBy(() -> context.editFields(original, fieldsRecord))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("missing");
     }
 
     public record Created(String id) {
     }
 
     public record Gadget(String name, int size) {
-        public GadgetBuilder toBuilder() {
-            return new GadgetBuilder().name(name).size(size);
-        }
     }
 
-    public static final class GadgetBuilder {
+    public static final class Widget {
         private String name;
         private int size;
 
-        public GadgetBuilder name(String name) {
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
             this.name = name;
-            return this;
         }
 
-        public GadgetBuilder size(int size) {
+        public int getSize() {
+            return size;
+        }
+
+        public void setSize(int size) {
             this.size = size;
-            return this;
-        }
-
-        public Gadget build() {
-            return new Gadget(name, size);
         }
     }
 
